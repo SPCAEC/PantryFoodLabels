@@ -20,18 +20,26 @@ lookupBtn.addEventListener('click', () => {
 
 async function performLookup(upc) {
   resultDiv.textContent = 'Looking up…';
-  try {
-    const res  = await fetch(`${API_BASE}?action=lookup&barcode=${encodeURIComponent(upc)}`);
-    const json = await res.json();
 
-    if (json.found) {
-      renderRecord(json.record);
-    } else {
-      renderNotFound(upc);
-    }
-  } catch (err) {
-    resultDiv.textContent = 'Error: ' + err;
-  }
+  // 1) unique callback name
+  const cbName = 'lookup_cb_' + Date.now();
+  window[cbName] = json => {
+    // cleanup
+    delete window[cbName];
+    script.remove();
+
+    // handle response
+    if (json.found) renderRecord(json.record);
+    else            renderNotFound(upc);
+  };
+
+  // 2) inject a <script> tag instead of fetch()
+  const script = document.createElement('script');
+  script.src = `${API_BASE}`
+             + `?action=lookup`
+             + `&barcode=${encodeURIComponent(upc)}`
+             + `&callback=${cbName}`;
+  document.body.appendChild(script);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
