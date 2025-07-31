@@ -1,0 +1,42 @@
+body {
+  font-family: Arial, sans-serif;
+  background: #f8f8f8;
+  padding: 20px;
+}
+.container {
+  max-width: 400px;
+  margin: auto;
+  background: white;
+  padding: 30px;
+  border-radius: 10px;
+  text-align: center;
+  box-shadow: 0 0 10px rgba(0,0,0,0.1);
+}
+input[type="text"], input[type="date"], textarea {
+  width: 100%;
+  padding: 8px;
+  margin-bottom: 15px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  color: #000;
+}
+button {
+  width: 100%;
+  padding: 10px;
+  margin-top: 10px;
+  border: none;
+  border-radius: 5px;
+  font-size: 16px;
+  cursor: pointer;
+}
+button:hover {
+  opacity: 0.9;
+}
+button[onclick*="startScanner"] {
+  background-color: #2196F3;
+  color: white;
+}
+button[onclick*="lookupUPC"] {
+  background-color: #4CAF50;
+  color: white;
+}
