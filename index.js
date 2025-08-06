@@ -1,34 +1,38 @@
 const express = require('express');
 const multer = require('multer');
-const { PDFDocument } = require('pdf-lib');
-const cors = require('cors');
-
+const PDFMerger = require('pdf-merger-js');
 const app = express();
-const upload = multer();
-app.use(cors());
+const port = process.env.PORT || 3000;
 
-app.post('/merge', upload.array('pdfs'), async (req, res) => {
+app.use(express.json({ limit: '50mb' }));
+
+app.post('/merge', async (req, res) => {
   try {
-    const mergedPdf = await PDFDocument.create();
-
-    for (const file of req.files) {
-      const pdf = await PDFDocument.load(file.buffer);
-      const copiedPages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
-      copiedPages.forEach(page => mergedPdf.addPage(page));
+    const files = req.body.files;
+    if (!Array.isArray(files) || files.length === 0) {
+      return res.status(400).send('No files provided.');
     }
 
-    const mergedPdfBytes = await mergedPdf.save();
+    const merger = new PDFMerger();
+    for (const file of files) {
+      const buffer = Buffer.from(file.data, 'base64');
+      await merger.add(buffer);
+    }
 
+    const mergedBuffer = await merger.saveAsBuffer();
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', 'attachment; filename=merged.pdf');
-    res.send(Buffer.from(mergedPdfBytes));
+    res.send(mergedBuffer);
   } catch (err) {
-    console.error('Merge failed:', err);
+    console.error('Merge error:', err);
     res.status(500).send('Error merging PDFs');
   }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`PDF Merge service running on port ${PORT}`);
+app.get('/', (req, res) => {
+  res.send('PDF Merge Service is up and running.');
+});
+
+app.listen(port, () => {
+  console.log(`PDF Merge Service listening at http://localhost:${port}`);
 });
