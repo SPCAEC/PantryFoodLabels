@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <title>Pet Food Pantry Label Generator</title>
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/dynamsoft-javascript-barcode@9.6.10/dist/dbr.js"></script>
+
+  <style>
+    :root{
+      --bg:#fff; --fg:#0f172a; --muted:#475569;
+      --accent:#0ea5e9; --accent-hover:#0284c7;       /* restored */
+      --success:#16a34a; --danger:#dc2626;
+      --ring:0 0 0 3px rgba(14,165,233,.35);
+
+      /* kiosk-style sizing */
+      --base:26px;
+      --heading:36px;
+      --button:30px;
+      --input:28px;
+      --label:26px;
+    }
+
+    *{ box-sizing:border-box }
+    html,body{
+      height:100%;
+      -webkit-text-size-adjust:none;
+      font-size: var(--base) !important;
+    }
+    body{
+      margin:0; color:var(--fg); background:var(--bg);
+      font-family:system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      line-height:1.5;
+    }
+
+    .app{ width:100%; max-width:none; margin:0; padding:1.5rem 1rem 2.5rem; }
+
+    header{ padding:.5rem 0 .25rem 0; }
+    h1{ font-size: calc(var(--heading) / var(--base) * 1rem); margin:.25rem 0; line-height:1.2; }
+    .subtitle{ color:var(--muted); margin:0 0 .5rem 0; font-size:1rem; }
+
+    .row{ display:grid; gap:1rem; }
+    .field{ display:grid; gap:.5rem; }
+    label{ font-weight:700; font-size: calc(var(--label) / var(--base) * 1rem); }
+
+    /* Textual inputs only (NOT checkboxes) */
+    input:not([type="checkbox"]), textarea, select{
+      width:100%;
+      font-size: calc(var(--input) / var(--base) * 1rem);
+      padding:1.1rem 1.25rem;
+      border:2px solid #555;
+      border-radius:18px;
+      -webkit-appearance:none; appearance:none;
+      background:#fff;
+    }
+
+    ::placeholder{ color:#666; opacity:1; }
+    input:focus, textarea:focus, select:focus{
+      outline:none; box-shadow:var(--ring); border-color:var(--accent);
+    }
+
+    /* checkbox row */
+    .check-row{
+      display:flex; align-items:center; gap:.8rem;
+      padding:.25rem .25rem;
+    }
+    /* Restore native checkbox look/behavior */
+    .check-row input[type="checkbox"]{
+      width:1.25rem; height:1.25rem;
+      -webkit-appearance: checkbox;
+      appearance: checkbox;
+      margin: 0;
+      cursor: pointer;
+    }
+    .check-row label{ font-weight:700; font-size:1rem; margin:0; }
+
+    .actions{ display:grid; gap:.9rem; }
+
+    .btn{
+      display:flex; align-items:center; justify-content:center; gap:.7rem; width:100%;
+      font-size: calc(var(--button) / var(--base) * 1rem);
+      padding:1.35rem 1.2rem; border-radius:22px; border:1px solid transparent;
+      background:var(--accent); color:#fff; font-weight:800;
+      -webkit-appearance:none; appearance:none;
+    }
+    .btn:hover{ background:var(--accent-hover); cursor:pointer }
+    .btn.secondary{ background:#e2e8f0; color:#0f172a }
+    .btn.ghost{ background:transparent; border:1px solid #cbd5e1; color:#0f172a }
+    .btn:disabled{ background:#cbd5e1; color:#64748b; border-color:#94a3b8; cursor:not-allowed }
+
+    .btn.startover{
+      background-color:#e5e7eb; color:#111; border:1px solid #d1d5db;
+    }
+    .btn.startover:hover{ background-color:#d1d5db; }
+
+    .card{ border:none; border-radius:20px; padding:1.25rem; background:#f8fafc }
+    .msg{ margin-top:.5rem; font-size:1.05rem }
+    .msg[role="status"]{ min-height:1.25rem }
+    .msg.error{ color:var(--danger) }
+    .msg.success{ color:var(--success) }
+
+    .camera{ margin-top:.75rem }
+    video{ width:100%; max-height:60vh; border-radius:16px }
+    .camera .btn{ font-size:1.25rem; padding:1.5rem 1.3rem; border-radius:22px }
+
+    .spinner{
+      display:inline-block; width:1.6rem; height:1.6rem;
+      border:4px solid #cbd5e1; border-top-color:var(--accent);
+      border-radius:50%; animation:spin 1s linear infinite;
+    }
+    @keyframes spin{ to{ transform:rotate(360deg) } }
+
+    @media (min-width:420px){
+      :root{ --base:28px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>Pet Food Pantry Label Generator</h1>
+      <p class="subtitle">SPCA Serving Erie County</p>
+      <button id="startOverBtn" class="btn startover" title="Start Over">Start Over</button>
+    </header>
+
+    <div class="row">
+      <div class="field">
+        <label for="upcInput">Scan or enter a UPC</label>
+        <input id="upcInput" type="text" placeholder="0123456789012" autofocus inputmode="numeric" autocomplete="off" aria-label="UPC" />
+      </div>
+      <div class="actions">
+        <button id="scanUPCBtn" class="btn" title="Scan barcode">📷 Scan Barcode</button>
+        <button id="lookupBtn" class="btn secondary" disabled>🔍 Look Up</button>
+      </div>
+      <div id="message" class="msg" role="status" aria-live="polite"></div>
+    </div>
+
+    <div id="result" class="row"></div>
+
+    <div id="expirationContainer" class="card" style="display:none">
+      <div class="field">
+        <label for="expirationInput">Expiration Date</label>
+        <input id="expirationInput" type="date" />
+      </div>
+      <button id="createLabelBtn" class="btn" disabled>Create 4×6 Label</button>
+    </div>
+  </div>
+
+  <script>
+    // Barcode license
+    Dynamsoft.DBR.BarcodeScanner.license = "DLS2eyJoYW5kc2hha2VDb2RlIjoiMTA0MzY1MTU3LU1UQTBNelkxTVRVM0xYZGxZaTFVY21saGJGQnliMm8iLCJtYWluU2VydmVyVVJMIjoiaHR0cHM6Ly9tZGxzLmR5bmFtc29mdG9ubGluZS5jb20iLCJvcmdhbml6YXRpb25JRCI6IjEwNDM2NTE1NyIsInN0YW5kYnlTZXJ2ZXJVUkwiOiJodHRwczovL3NkbHMuZHluYW1zb2Z0b25saW5lLmNvbSIsImNoZWNrQ29kZSI6MTI5Nzc5NDc4OH0=";
+
+    window.addEventListener('load', () => {
+      console.clear(); console.log('🔥 UI Loaded');
+
+      let currentUPC = null;
+      let confirmedData = null;
+      let scanning = false;
+      let dbrInstance = null;
+
+      // Elements
+      const upcInput = document.getElementById('upcInput');
+      const lookupBtn = document.getElementById('lookupBtn');
+      const messageDiv = document.getElementById('message');
+      const resultDiv = document.getElementById('result');
+      const expirationContainer = document.getElementById('expirationContainer');
+      const expirationInput = document.getElementById('expirationInput');
+      const createLabelBtn = document.getElementById('createLabelBtn');
+      const scanUPCBtn = document.getElementById('scanUPCBtn');
+      const startOverBtn = document.getElementById('startOverBtn');
+
+      // Helpers
+      function setMsg(text, type){
+        messageDiv.classList.remove('error','success');
+        if(type==='error') messageDiv.classList.add('error');
+        if(type==='success') messageDiv.classList.add('success');
+        messageDiv.innerHTML = text || '';
+      }
+      function spinner(text){ return `<span class="spinner" aria-hidden="true"></span> <span>${text}</span>`; }
+      function todayISO(){ const d=new Date(); const m=String(d.getMonth()+1).padStart(2,'0'); const day=String(d.getDate()).padStart(2,'0'); return `${d.getFullYear()}-${m}-${day}`; }
+      expirationInput.min = todayISO();
+
+      // Smooth scroll helper (wait for layout)
+      function scrollAfterLayout(el, block = 'center') {
+        if (!el) return;
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            el.scrollIntoView({ behavior: 'smooth', block });
+          });
+        });
+      }
+
+      function resetUI(){
+        currentUPC=null; confirmedData=null; scanning=false;
+        upcInput.value=''; upcInput.disabled=false; upcInput.focus();
+        lookupBtn.disabled=true; lookupBtn.style.display='';
+        scanUPCBtn.disabled=false; scanUPCBtn.style.display='';
+        resultDiv.innerHTML=''; setMsg('');
+        expirationContainer.style.display='none';
+      }
+      startOverBtn.onclick = resetUI;
+
+      // Enable Look Up when text present
+      upcInput.addEventListener('input', () => {
+        lookupBtn.disabled = upcInput.value.trim() === '';
+      });
+      // Enter triggers Look Up
+      upcInput.addEventListener('keydown', e => { if(e.key==='Enter' && !lookupBtn.disabled){ e.preventDefault(); lookupBtn.click(); }});
+
+      async function getDecoder(){
+        if(!dbrInstance){ dbrInstance = await Dynamsoft.DBR.BarcodeScanner.createInstance(); }
+        return dbrInstance;
+      }
+
+      // Scan flow
+      scanUPCBtn.addEventListener('click', async () => {
+        if(scanning) return; scanning = true; scanUPCBtn.disabled = true; setMsg('Opening camera…');
+        resultDiv.innerHTML = `
+          <div class="camera card">
+            <video id="barcodeVideo" autoplay playsinline></video>
+            <div class="actions" style="margin-top:.5rem">
+              <button id="capturePhotoBtn" class="btn">📸 Capture</button>
+              <button id="cancelScanBtn" class="btn ghost">Cancel</button>
+            </div>
+            <canvas id="barcodeCanvas" style="display:none"></canvas>
+          </div>`;
+        const video = document.getElementById('barcodeVideo');
+        const captureBtn = document.getElementById('capturePhotoBtn');
+        const cancelBtn = document.getElementById('cancelScanBtn');
+        const canvas = document.getElementById('barcodeCanvas');
+
+        let stream;
+        try{
+          stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment' } });
+          video.srcObject = stream;
+          video.onloadedmetadata = () => { video.play?.(); scrollAfterLayout(captureBtn, 'center'); };  // fixed var name
+        }catch(err){
+          console.error(err); setMsg('Camera access denied. Try manual entry.', 'error'); scanning=false; scanUPCBtn.disabled=false; return;
+        }
+
+        cancelBtn.onclick = () => { stream.getTracks().forEach(t=>t.stop()); scanning=false; scanUPCBtn.disabled=false; resultDiv.innerHTML=''; setMsg('Scan canceled.'); };
+
+        captureBtn.onclick = async () => {
+          setMsg(spinner('Decoding…'));
+          canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+          canvas.getContext('2d').drawImage(video,0,0);
+          stream.getTracks().forEach(t=>t.stop());
+          const dataURL = canvas.toDataURL('image/png');
+          try{
+            const scanner = await getDecoder();
+            const results = await scanner.decode(dataURL);
+            if(results.length){
+              const code = results[0].barcodeText;
+              upcInput.value = code; lookupBtn.disabled = false; setMsg('Scan successful!', 'success');
+              resultDiv.innerHTML='';
+              lookupBtn.click();
+            }else{
+              setMsg('No barcode detected. Tap Scan to try again.', 'error');
+              scanning=false; scanUPCBtn.disabled=false; resultDiv.innerHTML='';
+            }
+          }catch(err){
+            console.error('DBR decode error:', err); setMsg('Error scanning barcode.', 'error'); scanning=false; scanUPCBtn.disabled=false; resultDiv.innerHTML='';
+          }
+        };
+      });
+
+      // Lookup handler
+      lookupBtn.addEventListener('click', () => {
+        const upc = upcInput.value.trim();
+        if (!upc){ setMsg('Please enter a UPC.', 'error'); return; }
+        setMsg(spinner('Looking up UPC…'));
+        lookupBtn.disabled = true; upcInput.disabled = true; resultDiv.innerHTML='';
+        expirationContainer.style.display = 'none'; confirmedData = null;
+
+        google.script.run
+          .withSuccessHandler(render)
+          .withFailureHandler(err => {
+            console.error(err); setMsg('Server error during lookup.', 'error');
+            lookupBtn.disabled = false; upcInput.disabled = false;
+          })
+          .lookupUPC(upc);
+      });
+
+      // Render response
+      function render(response){
+        if (response.found){
+          renderFound(response.data);
+          lookupBtn.style.display = 'none'; scanUPCBtn.style.display='none';
+        } else if (response.isNew){
+          lookupBtn.style.display = 'none'; scanUPCBtn.style.display='none';
+          promptForFrontImage(upcInput.value.trim());
+        } else {
+          setMsg('UPC does not exist.', 'error');
+          lookupBtn.disabled = false; upcInput.disabled = false;
+        }
+      }
+
+      // Render found record (kept table for now)
+      function renderFound(data){
+        confirmedData = data;
+        const cols = ['UPC','Species','Brand','Product Name','Flavor','Ingredients'];
+        let html = '<div class="card"><h3 style="margin:.25rem 0 0 0">Match Found</h3>';
+        html += '<table><tr>' + cols.map(h=>`<th>${h}</th>`).join('') + '</tr>';
+        html += '<tr>' + cols.map(h=>`<td>${data[h]||''}</td>`).join('') + '</tr></table></div>';
+        resultDiv.innerHTML = html; setMsg('');
+        expirationContainer.style.display = 'block';
+        updateCreateBtnState(); expirationContainer.scrollIntoView({behavior:'smooth', block:'start'});
+        upcInput.disabled=false; lookupBtn.disabled=false;
+      }
+
+      function updateCreateBtnState(){
+        if (expirationInput.value) createLabelBtn.removeAttribute('disabled');
+        else createLabelBtn.setAttribute('disabled','');
+      }
+      expirationInput.addEventListener('change', updateCreateBtnState);
+
+      // Prompt for front image
+      function promptForFrontImage(upc){
+        currentUPC = upc;
+        setMsg('New UPC. Take a clear photo of the FRONT of the package.');
+        resultDiv.innerHTML = `
+          <div class="card">
+            <div class="actions">
+              <button id="takeFrontBtn" class="btn">Take Front Photo</button>
+            </div>
+            <div id="cameraContainer" class="camera"></div>
+          </div>`;
+        const takeFrontBtn = document.getElementById('takeFrontBtn');
+        takeFrontBtn.onclick = async () => {
+          const container = document.getElementById('cameraContainer');
+          container.innerHTML = `
+            <video id="frontVideo" autoplay playsinline></video>
+            <div class="actions" style="margin-top:.5rem">
+              <button id="captureFrontBtn" class="btn">📸 Capture</button>
+              <button id="retakeFrontBtn" class="btn ghost">Cancel</button>
+            </div>`;
+          const video = document.getElementById('frontVideo');
+          const captureBtn = document.getElementById('captureFrontBtn');
+          const retakeBtn = document.getElementById('retakeFrontBtn');
+
+          let stream;
+          try{
+            stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment' } });
+            video.srcObject = stream;
+            video.onloadedmetadata = () => { video.play?.(); scrollAfterLayout(captureBtn, 'center'); };  // fixed var name
+          }catch(err){
+            setMsg('Camera access denied. Use file picker.', 'error');
+            return;
+          }
+
+          retakeBtn.onclick = () => { stream?.getTracks().forEach(t=>t.stop()); takeFrontBtn.click(); };
+
+          captureBtn.onclick = async () => {
+            setMsg(spinner('Uploading front photo…'));
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video,0,0);
+            stream?.getTracks().forEach(t=>t.stop());
+            const dataUrl = canvas.toDataURL('image/jpeg',0.9);
+            google.script.run
+              .withSuccessHandler(()=>{ setMsg('Front photo saved.', 'success'); promptForIngredients(); })
+              .withFailureHandler(err=>{ console.error(err); setMsg('Upload failed', 'error'); })
+              .captureFrontImageFromDataURL(currentUPC, dataUrl);
+          };
+        };
+      }
+
+      // Ingredients image
+      function promptForIngredients(){
+        setMsg('Now take a clear photo of the INGREDIENTS label.');
+        resultDiv.innerHTML = `
+          <div class="card">
+            <div class="actions">
+              <button id="takeIngBtn" class="btn">Take Ingredients Photo</button>
+            </div>
+            <div id="ingCameraContainer" class="camera"></div>
+          </div>`;
+        const takeIngBtn = document.getElementById('takeIngBtn');
+        takeIngBtn.onclick = async () => {
+          const container = document.getElementById('ingCameraContainer');
+          container.innerHTML = `
+            <video id="ingVideo" autoplay playsinline></video>
+            <div class="actions" style="margin-top:.5rem">
+              <button id="captureIngBtn" class="btn">📸 Capture</button>
+              <button id="retakeIngBtn" class="btn ghost">Cancel</button>
+            </div>`;
+          const video = document.getElementById('ingVideo');
+          const captureBtn = document.getElementById('captureIngBtn');
+          const retakeBtn = document.getElementById('retakeIngBtn');
+
+          let stream;
+          try{
+            stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment' } });
+            video.srcObject = stream;
+            video.onloadedmetadata = () => { video.play?.(); scrollAfterLayout(captureBtn, 'center'); };
+          }catch(err){
+            console.error(err); setMsg('Camera access denied. Use file picker.', 'error');
+            return;
+          }
+
+          retakeBtn.onclick = () => { stream?.getTracks().forEach(t=>t.stop()); takeIngBtn.click(); };
+
+          captureBtn.onclick = async () => {
+            setMsg(spinner('Uploading ingredients photo…'));
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video,0,0);
+            stream?.getTracks().forEach(t=>t.stop());
+            const dataUrl = canvas.toDataURL('image/jpeg',0.9);
+            google.script.run
+              .withSuccessHandler(data=>{ setMsg('Ingredients saved. Review details below.', 'success'); renderConfirmForm(data); })
+              .withFailureHandler(err=>{ console.error(err); setMsg('Upload failed', 'error'); })
+              .captureIngredientsFromDataURL(currentUPC, dataUrl);
+          };
+        };
+      }
+
+      // Map any free-form species to one of our four options
+      function normalizeSpeciesToOption(raw){
+        const s = String(raw || '').toLowerCase();
+        if (/puppy|pup|growth|junior|small\s*breed.*puppy/.test(s)) return 'Puppy';
+        if (/kitten|kittens|growth/.test(s)) return 'Kitten';
+        if (/dog|canine/.test(s)) return 'Dog';
+        if (/cat|feline/.test(s)) return 'Cat';
+        return ''; // unknown → user will choose
+      }
+
+      // Confirm form (with Species select + single Treats checkbox)
+      function renderConfirmForm(data){
+        confirmedData = data;
+        const speciesGuess = normalizeSpeciesToOption(data.Species);
+        const norm = {
+          Species: speciesGuess || '',
+          Brand: data.Brand || '',
+          'Product Name': data['Product Name'] || data.ProductName || '',
+          Flavor: data.Flavor || '',
+          Ingredients: data.Ingredients || ''
+        };
+        const isTreatYes = String(data.isTreat || '').toLowerCase() === 'yes';
+
+        resultDiv.innerHTML = `
+          <div class="card">
+            <h2 style="margin:.25rem 0 1rem 0">Confirm Details</h2>
+            <form id="confirmForm" class="row">
+
+              <div class="check-row">
+                <input type="checkbox" id="treatsToggle" name="isTreat" ${isTreatYes ? 'checked' : ''}/>
+                <label for="treatsToggle">This item is a Treat</label>
+              </div>
+
+              <div class="field">
+                <label>Species</label>
+                <select name="Species" id="speciesSelect">
+                  <option value="">Select…</option>
+                  <option value="Dog"${(norm.Species==='Dog')?' selected':''}>Dog</option>
+                  <option value="Puppy"${(norm.Species==='Puppy')?' selected':''}>Puppy</option>
+                  <option value="Cat"${(norm.Species==='Cat')?' selected':''}>Cat</option>
+                  <option value="Kitten"${(norm.Species==='Kitten')?' selected':''}>Kitten</option>
+                </select>
+              </div>
+
+              <label class="field">Brand<input name="Brand" value="${norm.Brand}"></label>
+              <label class="field">Product Name<input name="Product Name" value="${norm['Product Name']}"></label>
+              <label class="field">Flavor<input name="Flavor" value="${norm.Flavor}"></label>
+              <label class="field">Ingredients<textarea name="Ingredients" rows="4">${norm.Ingredients}</textarea></label>
+
+              <button type="submit" class="btn">Save to Database</button>
+            </form>
+          </div>`;
+
+        // Safety: if somehow duplicates exist, remove extras
+        const toggles = resultDiv.querySelectorAll('#treatsToggle');
+        for (let i = 1; i < toggles.length; i++) {
+          const row = toggles[i].closest('.check-row');
+          if (row) row.remove();
+        }
+
+        const form = document.getElementById('confirmForm');
+        form.onsubmit = (e)=>{
+          e.preventDefault();
+          const formData = Object.fromEntries(new FormData(e.target));
+          // Normalize checkbox to Yes/No
+          formData.isTreat = document.getElementById('treatsToggle').checked ? 'Yes' : 'No';
+
+          // Keep a copy locally for label step
+          confirmedData = { ...confirmedData, ...formData };
+
+          setMsg(spinner('Saving record…'));
+          google.script.run
+            .withSuccessHandler(()=>{
+              setMsg('Record saved.', 'success');
+              expirationContainer.style.display='block';
+              updateCreateBtnState();
+              expirationContainer.scrollIntoView({behavior:'smooth', block:'start'});
+            })
+            .withFailureHandler(err=>{
+              console.error(err); setMsg('Save failed', 'error');
+            })
+            .saveRecord(formData);
+        };
+      }
+
+      // Create label (add foodType => "Food" | "Treats")
+      createLabelBtn.addEventListener('click', () => {
+        if (!expirationInput.value){ setMsg('Please select an expiration date.', 'error'); return; }
+        createLabelBtn.disabled = true;
+        setMsg(spinner('Generating label…'));
+
+        const treatsChecked = document.getElementById('treatsToggle')?.checked === true;
+        const foodType = treatsChecked ? 'Treats' : 'Food';
+
+        const labelData = { ...confirmedData, Expiration: expirationInput.value, foodType };
+        google.script.run
+          .withSuccessHandler(res=>{
+            setMsg('Label ready.', 'success');
+            resultDiv.innerHTML = `<div class="card"><a href="${res.url}" target="_blank" rel="noopener">Open 4×6 PDF for printing</a></div>`;
+          })
+          .withFailureHandler(err=>{
+            console.error(err); setMsg('Label creation failed', 'error'); createLabelBtn.disabled=false;
+          })
+          .createLabel(labelData);
+      });
+
+    });
+  </script>
+</body>
+</html>
