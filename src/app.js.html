@@ -1,9 +1,10 @@
-<script>
-(function(){
-  // DOM helpers
+(function () {
+  // ───────────────────────────────────────────────────────────────────────────
+  // DOM & helpers
+  // ───────────────────────────────────────────────────────────────────────────
   const $ = (id) => document.getElementById(id);
-  const digits = s => String(s||'').replace(/\D/g,'');
-  const toUPC12 = s => { const d = digits(s); return d.length >= 12 ? d.slice(-12) : d.padStart(12,'0'); };
+  const digits = s => String(s || '').replace(/\D/g, '');
+  const toUPC12 = s => { const d = digits(s); return d.length >= 12 ? d.slice(-12) : d.padStart(12, '0'); };
   const spinner = (t) => `<span class="spinner" aria-hidden="true"></span> <span>${t}</span>`;
 
   const upcInput            = $('upcInput');
@@ -16,33 +17,36 @@
   const scanUPCBtn          = $('scanUPCBtn');
   const startOverBtn        = $('startOverBtn');
 
-  let currentUPC   = null;
+  let currentUPC = null;
   let confirmedData = null;
 
-  function setMsg(text, type){
-    messageDiv.classList.remove('error','success');
-    if(type==='error') messageDiv.classList.add('error');
-    if(type==='success') messageDiv.classList.add('success');
+  function setMsg(text, type) {
+    messageDiv.classList.remove('error', 'success');
+    if (type === 'error') messageDiv.classList.add('error');
+    if (type === 'success') messageDiv.classList.add('success');
     messageDiv.innerHTML = text || '';
   }
-  function todayISO(){
-    const d=new Date(); const m=String(d.getMonth()+1).padStart(2,'0'); const day=String(d.getDate()).padStart(2,'0');
+
+  function todayISO() {
+    const d = new Date();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
     return `${d.getFullYear()}-${m}-${day}`;
   }
   expirationInput.min = todayISO();
 
-  function scrollAfterLayout(el, block='center'){
-    if(!el) return;
-    requestAnimationFrame(()=>requestAnimationFrame(()=>el.scrollIntoView({behavior:'smooth', block})));
+  function scrollAfterLayout(el, block = 'center') {
+    if (!el) return;
+    requestAnimationFrame(() => requestAnimationFrame(() => el.scrollIntoView({ behavior: 'smooth', block })));
   }
 
-  function resetUI(){
-    currentUPC=null; confirmedData=null;
-    upcInput.value=''; upcInput.disabled=false; upcInput.focus();
-    lookupBtn.disabled=true; lookupBtn.style.display='';
-    scanUPCBtn.disabled=false; scanUPCBtn.style.display='';
-    resultDiv.innerHTML=''; setMsg('');
-    expirationContainer.style.display='none';
+  function resetUI() {
+    currentUPC = null; confirmedData = null;
+    upcInput.value = ''; upcInput.disabled = false; upcInput.focus();
+    lookupBtn.disabled = true; lookupBtn.style.display = '';
+    scanUPCBtn.disabled = false; scanUPCBtn.style.display = '';
+    resultDiv.innerHTML = ''; setMsg('');
+    expirationContainer.style.display = 'none';
   }
   startOverBtn.onclick = resetUI;
 
@@ -55,14 +59,39 @@
   upcInput.addEventListener('blur', () => { if (upcInput.value) upcInput.value = toUPC12(upcInput.value); });
   // Enter triggers lookup
   upcInput.addEventListener('keydown', e => {
-    if(e.key==='Enter' && !lookupBtn.disabled){
+    if (e.key === 'Enter' && !lookupBtn.disabled) {
       e.preventDefault();
       upcInput.value = toUPC12(upcInput.value);
       lookupBtn.click();
     }
   });
 
-  // Barcode scan flow (Dynamsoft)
+  // ───────────────────────────────────────────────────────────────────────────
+  // Unified scan flow: Scandit → fallback to Dynamsoft
+  // Expects global helpers (added in Index.html):
+  //   - openScanditScanner(host)        // returns Promise<string|null>
+  //   - openDynamsoftScanner(host)      // returns Promise<string|null>
+  // ───────────────────────────────────────────────────────────────────────────
+  async function scanWithPreferred(hostEl) {
+    // Try Scandit first (if helper exists)
+    if (typeof window.openScanditScanner === 'function') {
+      try {
+        const code = await window.openScanditScanner(hostEl);
+        if (code) return code;
+      } catch (e) {
+        console.warn('[Scan] Scandit failed, falling back → Dynamsoft', e);
+      }
+    }
+    // Fallback to Dynamsoft (if helper exists)
+    if (typeof window.openDynamsoftScanner === 'function') {
+      const code = await window.openDynamsoftScanner(hostEl);
+      if (code) return code;
+    }
+    // If neither helper exists, throw to surface setup issue
+    throw new Error('No scanner helper available. Include scanner-scandit.js or scanner-dynamsoft.js.');
+  }
+
+  // Click → open camera, one-shot → close & populate → auto lookup
   scanUPCBtn.addEventListener('click', async () => {
     setMsg('Opening camera…');
     resultDiv.innerHTML = `
@@ -74,10 +103,10 @@
 
     let code = null;
     try {
-      code = await openDynamsoftScanner(host);
+      code = await scanWithPreferred(host);
     } catch (e) {
       console.error(e);
-      setMsg('Camera access denied. Try manual entry.', 'error');
+      setMsg('Camera unavailable. Try manual entry.', 'error');
       resultDiv.innerHTML = '';
       return;
     }
@@ -97,14 +126,16 @@
     lookupBtn.click();
   });
 
+  // ───────────────────────────────────────────────────────────────────────────
   // Lookup against sheet
+  // ───────────────────────────────────────────────────────────────────────────
   lookupBtn.addEventListener('click', () => {
-    if (!upcInput.value){ setMsg('Please enter a UPC.', 'error'); return; }
+    if (!upcInput.value) { setMsg('Please enter a UPC.', 'error'); return; }
     const upc12 = toUPC12(upcInput.value);
     upcInput.value = upc12;
 
     setMsg(spinner('Looking up UPC…'));
-    lookupBtn.disabled = true; upcInput.disabled = true; resultDiv.innerHTML='';
+    lookupBtn.disabled = true; upcInput.disabled = true; resultDiv.innerHTML = '';
     expirationContainer.style.display = 'none'; confirmedData = null;
 
     google.script.run
@@ -116,12 +147,12 @@
       .lookupUPC(upc12);
   });
 
-  function render(response){
-    if (response.found){
+  function render(response) {
+    if (response.found) {
       renderFound(response.data);
-      lookupBtn.style.display = 'none'; scanUPCBtn.style.display='none';
-    } else if (response.isNew){
-      lookupBtn.style.display = 'none'; scanUPCBtn.style.display='none';
+      lookupBtn.style.display = 'none'; scanUPCBtn.style.display = 'none';
+    } else if (response.isNew) {
+      lookupBtn.style.display = 'none'; scanUPCBtn.style.display = 'none';
       promptForFrontImage(upcInput.value.trim());
     } else {
       setMsg('UPC does not exist.', 'error');
@@ -129,24 +160,26 @@
     }
   }
 
-  function renderFound(data){
+  function renderFound(data) {
     confirmedData = data;
-    const cols = ['UPC','Species','Brand','Product Name','Flavor','Ingredients'];
+    const cols = ['UPC', 'Species', 'Brand', 'Product Name', 'Flavor', 'Ingredients'];
     let html = '<div class="card"><h3 style="margin:.25rem 0 0 0">Match Found</h3>';
-    html += '<table><tr>' + cols.map(h=>`<th>${h}</th>`).join('') + '</tr>';
-    html += '<tr>' + cols.map(h=>`<td>${data[h]||''}</td>`).join('') + '</tr></table></div>';
+    html += '<table><tr>' + cols.map(h => `<th>${h}</th>`).join('') + '</tr>';
+    html += '<tr>' + cols.map(h => `<td>${data[h] || ''}</td>`).join('') + '</tr></table></div>';
     resultDiv.innerHTML = html; setMsg('');
     expirationContainer.style.display = 'block';
-    if (expirationInput.value) createLabelBtn.removeAttribute('disabled'); else createLabelBtn.setAttribute('disabled','');
-    expirationContainer.scrollIntoView({behavior:'smooth', block:'start'});
-    upcInput.disabled=false; lookupBtn.disabled=false;
+    if (expirationInput.value) createLabelBtn.removeAttribute('disabled'); else createLabelBtn.setAttribute('disabled', '');
+    expirationContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    upcInput.disabled = false; lookupBtn.disabled = false;
   }
-  expirationInput.addEventListener('change', ()=> {
-    if (expirationInput.value) createLabelBtn.removeAttribute('disabled'); else createLabelBtn.setAttribute('disabled','');
+  expirationInput.addEventListener('change', () => {
+    if (expirationInput.value) createLabelBtn.removeAttribute('disabled'); else createLabelBtn.setAttribute('disabled', '');
   });
 
-  // New UPC → capture photos
-  function promptForFrontImage(upc){
+  // ───────────────────────────────────────────────────────────────────────────
+  // New UPC → capture photos (plain getUserMedia, not barcode)
+  // ───────────────────────────────────────────────────────────────────────────
+  function promptForFrontImage(upc) {
     currentUPC = upc;
     setMsg('New UPC. Take a clear photo of the FRONT of the package.');
     resultDiv.innerHTML = `
@@ -159,7 +192,7 @@
     $('takeFrontBtn').onclick = () => openCaptureInto('cameraContainer', 'front');
   }
 
-  function promptForIngredients(){
+  function promptForIngredients() {
     setMsg('Now take a clear photo of the INGREDIENTS label.');
     resultDiv.innerHTML = `
       <div class="card">
@@ -171,8 +204,7 @@
     $('takeIngBtn').onclick = () => openCaptureInto('ingCameraContainer', 'ingredients');
   }
 
-  // Simple getUserMedia capture (not barcode) for photos
-  async function openCaptureInto(containerId, kind){
+  async function openCaptureInto(containerId, kind) {
     const container = $(containerId);
     container.innerHTML = `
       <video id="${kind}Video" autoplay playsinline></video>
@@ -182,20 +214,20 @@
       </div>`;
     const video = $(`${kind}Video`);
     const captureBtn = $(`capture${kind}Btn`);
-    const retakeBtn  = $(`retake${kind}Btn`);
+    const retakeBtn = $(`retake${kind}Btn`);
 
     let stream;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment' } });
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
       video.srcObject = stream;
       video.onloadedmetadata = () => { video.play?.(); };
-    } catch(err) {
+    } catch (err) {
       setMsg('Camera access denied. Use file picker.', 'error');
       return;
     }
 
     retakeBtn.onclick = () => {
-      try { stream?.getTracks().forEach(t=>t.stop()); } catch(_) {}
+      try { stream?.getTracks().forEach(t => t.stop()); } catch (_) { }
       container.innerHTML = '';
     };
 
@@ -203,25 +235,28 @@
       setMsg(spinner(kind === 'front' ? 'Uploading front photo…' : 'Uploading ingredients photo…'));
       const canvas = document.createElement('canvas');
       canvas.width = video.videoWidth; canvas.height = video.videoHeight;
-      canvas.getContext('2d').drawImage(video,0,0);
-      try { stream?.getTracks().forEach(t=>t.stop()); } catch(_) {}
+      canvas.getContext('2d').drawImage(video, 0, 0);
+      try { stream?.getTracks().forEach(t => t.stop()); } catch (_) { }
 
-      const dataUrl = canvas.toDataURL('image/jpeg',0.9);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
       if (kind === 'front') {
         google.script.run
-          .withSuccessHandler(()=>{ setMsg('Front photo saved.', 'success'); promptForIngredients(); })
-          .withFailureHandler(err=>{ console.error(err); setMsg('Upload failed', 'error'); })
+          .withSuccessHandler(() => { setMsg('Front photo saved.', 'success'); promptForIngredients(); })
+          .withFailureHandler(err => { console.error(err); setMsg('Upload failed', 'error'); })
           .captureFrontImageFromDataURL(currentUPC, dataUrl);
       } else {
         google.script.run
-          .withSuccessHandler(data=>{ setMsg('Ingredients saved. Review details below.', 'success'); renderConfirmForm(data); })
-          .withFailureHandler(err=>{ console.error(err); setMsg('Upload failed', 'error'); })
+          .withSuccessHandler(data => { setMsg('Ingredients saved. Review details below.', 'success'); renderConfirmForm(data); })
+          .withFailureHandler(err => { console.error(err); setMsg('Upload failed', 'error'); })
           .captureIngredientsFromDataURL(currentUPC, dataUrl);
       }
     };
   }
 
-  function normalizeSpeciesToOption(raw){
+  // ───────────────────────────────────────────────────────────────────────────
+  // Confirm & Save
+  // ───────────────────────────────────────────────────────────────────────────
+  function normalizeSpeciesToOption(raw) {
     const s = String(raw || '').toLowerCase();
     if (/puppy|pup|growth|junior|small\s*breed.*puppy/.test(s)) return 'Puppy';
     if (/kitten|kittens|growth/.test(s)) return 'Kitten';
@@ -230,7 +265,7 @@
     return '';
   }
 
-  function renderConfirmForm(data){
+  function renderConfirmForm(data) {
     confirmedData = data;
     const speciesGuess = normalizeSpeciesToOption(data.Species);
     const norm = {
@@ -276,7 +311,7 @@
     }
 
     const form = $('confirmForm');
-    form.onsubmit = (e)=>{
+    form.onsubmit = (e) => {
       e.preventDefault();
       const formData = Object.fromEntries(new FormData(e.target));
       formData.isTreat = $('treatsToggle').checked ? 'Yes' : 'No';
@@ -284,22 +319,24 @@
 
       setMsg(spinner('Saving record…'));
       google.script.run
-        .withSuccessHandler(()=>{
+        .withSuccessHandler(() => {
           setMsg('Record saved.', 'success');
-          expirationContainer.style.display='block';
-          if (expirationInput.value) createLabelBtn.removeAttribute('disabled'); else createLabelBtn.setAttribute('disabled','');
-          expirationContainer.scrollIntoView({behavior:'smooth', block:'start'});
+          expirationContainer.style.display = 'block';
+          if (expirationInput.value) createLabelBtn.removeAttribute('disabled'); else createLabelBtn.setAttribute('disabled', '');
+          expirationContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
         })
-        .withFailureHandler(err=>{
+        .withFailureHandler(err => {
           console.error(err); setMsg('Save failed', 'error');
         })
         .saveRecord(formData);
     };
   }
 
-  // Create label
+  // ───────────────────────────────────────────────────────────────────────────
+  // Label creation
+  // ───────────────────────────────────────────────────────────────────────────
   createLabelBtn.addEventListener('click', () => {
-    if (!expirationInput.value){ setMsg('Please select an expiration date.', 'error'); return; }
+    if (!expirationInput.value) { setMsg('Please select an expiration date.', 'error'); return; }
     createLabelBtn.disabled = true;
     setMsg(spinner('Generating label…'));
 
@@ -308,18 +345,20 @@
 
     const labelData = { ...confirmedData, Expiration: expirationInput.value, foodType };
     google.script.run
-      .withSuccessHandler(res=>{
+      .withSuccessHandler(res => {
         setMsg('Label ready.', 'success');
         resultDiv.innerHTML = `<div class="card"><a href="${res.url}" target="_blank" rel="noopener">Open 4×6 PDF for printing</a></div>`;
       })
-      .withFailureHandler(err=>{
-        console.error(err); setMsg('Label creation failed', 'error'); createLabelBtn.disabled=false;
+      .withFailureHandler(err => {
+        console.error(err); setMsg('Label creation failed', 'error'); createLabelBtn.disabled = false;
       })
       .createLabel(labelData);
   });
 
+  // ───────────────────────────────────────────────────────────────────────────
+  // Boot
+  // ───────────────────────────────────────────────────────────────────────────
   window.addEventListener('load', () => {
-    console.clear(); console.log('🔥 UI Loaded (split frontend)');
+    console.clear(); console.log('🔥 UI Loaded (split frontend) — Scandit-first with Dynamsoft fallback');
   });
 })();
-</script>

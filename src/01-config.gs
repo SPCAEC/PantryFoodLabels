@@ -10,3 +10,12 @@ const OPENAI_MODEL      = 'gpt-4o';
 
 // ScriptProperty key used to loosely track the most-recent UPC in this flow
 const KEY_LAST_UPC = 'LAST_UPC';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Scandit license getter (reads SCANDIT_LICENSE_KEY from Script Properties)
+// ─────────────────────────────────────────────────────────────────────────────
+function getScanditLicense() {
+  const key = PropertiesService.getScriptProperties().getProperty('SCANDIT_LICENSE_KEY');
+  if (!key) throw new Error('Missing SCANDIT_LICENSE_KEY in Script Properties');
+  return key;
+}
