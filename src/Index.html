@@ -14,8 +14,9 @@
   <!-- Scandit Web DataCapture v7 (primary) -->
   <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/@scandit/web-datacapture-core@7.6.0/build/js/index.js">
   <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/@scandit/web-datacapture-barcode@7.6.0/build/js/index.js">
-  <!-- Load the shims before the import map to avoid any race conditions -->
-  <script defer src="https://ga.jspm.io/npm:es-module-shims@1.10.0/dist/es-module-shims.js"></script>
+
+  <!-- Load shims BEFORE the import map -->
+  <script async src="https://ga.jspm.io/npm:es-module-shims@1.10.0/dist/es-module-shims.js"></script>
   <script type="importmap">
   {
     "imports": {
@@ -62,19 +63,19 @@
     </div>
   </div>
 
-  <!-- Scanner (Scandit primary) -->
+  <!-- Scandit (primary) -->
   <script type="module">
-    <?!= include('scanner-scandit.js'); ?>
+    <?!= includeScript('scanner-scandit.js'); ?>
   </script>
 
-  <!-- Scanner (Dynamsoft fallback / legacy) -->
+  <!-- Dynamsoft (fallback / legacy) -->
   <script>
-    <?!= include('scanner-dynamsoft.js'); ?>
+    <?!= includeScript('scanner-dynamsoft.js'); ?>
   </script>
 
   <!-- App logic -->
   <script>
-    <?!= include('app.js'); ?>
+    <?!= includeScript('app.js'); ?>
   </script>
 </body>
 </html>
