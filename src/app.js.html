@@ -73,8 +73,10 @@
   //   - openDynamsoftScanner(host)      // returns Promise<string|null>
   // ───────────────────────────────────────────────────────────────────────────
   async function scanWithPreferred(hostEl) {
-    // Try Scandit first (if helper exists)
-    if (typeof window.openScanditScanner === 'function') {
+    const hasScandit = typeof window.openScanditScanner === 'function';
+    const hasDynamsoft = typeof window.openDynamsoftScanner === 'function';
+
+    if (hasScandit) {
       try {
         const code = await window.openScanditScanner(hostEl);
         if (code) return code;
@@ -82,17 +84,21 @@
         console.warn('[Scan] Scandit failed, falling back → Dynamsoft', e);
       }
     }
-    // Fallback to Dynamsoft (if helper exists)
-    if (typeof window.openDynamsoftScanner === 'function') {
-      const code = await window.openDynamsoftScanner(hostEl);
-      if (code) return code;
+    if (hasDynamsoft) {
+      try {
+        const code = await window.openDynamsoftScanner(hostEl);
+        if (code) return code;
+      } catch (e) {
+        console.warn('[Scan] Dynamsoft failed:', e);
+      }
     }
-    // If neither helper exists, throw to surface setup issue
-    throw new Error('No scanner helper available. Include scanner-scandit.js or scanner-dynamsoft.js.');
+    console.error('No scanner helper available — check Index.html includes.');
+    return null;
   }
 
   // Click → open camera, one-shot → close & populate → auto lookup
   scanUPCBtn.addEventListener('click', async () => {
+    scanUPCBtn.disabled = true;                       // prevent double-tap
     setMsg('Opening camera…');
     resultDiv.innerHTML = `
       <div class="card">
@@ -108,12 +114,14 @@
       console.error(e);
       setMsg('Camera unavailable. Try manual entry.', 'error');
       resultDiv.innerHTML = '';
+      scanUPCBtn.disabled = false;                   // re-enable on error
       return;
     }
 
     if (!code) {
       setMsg('No barcode detected. Tap Scan to try again.', 'error');
       resultDiv.innerHTML = '';
+      scanUPCBtn.disabled = false;                   // re-enable on cancel/no result
       return;
     }
 
@@ -123,6 +131,7 @@
     lookupBtn.disabled = false;
     setMsg('Scan successful!', 'success');
     resultDiv.innerHTML = '';
+    scanUPCBtn.disabled = false;                     // optional: allow immediate re-scan
     lookupBtn.click();
   });
 
