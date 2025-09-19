@@ -39,6 +39,16 @@
       <button id="startOverBtn" class="btn startover" title="Start Over">Start Over</button>
     </header>
 
+    <script>
+      (function(){
+        const h1 = document.querySelector('header h1');
+        if (h1) h1.textContent += ' — JS ACTIVE';
+        const btn = document.getElementById('startOverBtn');
+        if (btn) btn.textContent = 'Start Over (JS active)';
+        console.log('[index] inline probe ran inside iframe');
+      })();
+    </script>
+
     <div class="row">
       <div class="field">
         <label for="upcInput">Scan or enter a UPC</label>
