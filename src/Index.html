@@ -71,10 +71,19 @@
       <button id="createLabelBtn" class="btn" disabled>Create 4×6 Label</button>
     </div>
   </div>
-
-  <!-- Include self-wrapped scripts (no extra <script> wrappers here) -->
+<!-- Scandit (module) -->
+<script type="module">
   <?!= include('scanner-scandit.js'); ?>
+</script>
+
+<!-- Dynamsoft fallback (plain) -->
+<script>
   <?!= include('scanner-dynamsoft.js'); ?>
+</script>
+
+<!-- App logic (plain) -->
+<script>
   <?!= include('app.js'); ?>
+</script>
 </body>
 </html>
