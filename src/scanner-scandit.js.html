@@ -1,4 +1,3 @@
-<script type="module">
 import {
   configure,
   DataCaptureContext,
@@ -45,7 +44,8 @@ function enableEANUPCSymbologies(settings) {
 }
 
 /**
- * Open a single-use scanner UI, resolve with decoded text once, then stop camera and detach.
+ * Open a single-use scanner UI, resolve with decoded text once,
+ * then stop camera and detach.
  * @param {HTMLElement} containerEl - element to host the live view
  * @returns {Promise<string|null>}
  */
@@ -78,10 +78,12 @@ async function scanOnce(containerEl) {
     try { await capture.setEnabled(false); } catch(_) {}
     try { await camera.switchToDesiredState(FrameSourceState.Off); } catch(_) {}
     try { view.connectToElement(null); } catch(_) {}
+    // optional: clear context to release resources faster
+    try { await context.removeAllModes(); } catch(_) {}
   }
 
   return new Promise(async (resolve) => {
-    // cancel button support (optional): if your container has a "data-cancel-button"
+    // Optional cancel button support: any element inside the same card with this attr
     const cancelBtn = containerEl.closest('.card')?.querySelector('[data-cancel-scandit]');
     if (cancelBtn) {
       cancelBtn.onclick = async () => { await teardown(); resolve(null); };
@@ -92,10 +94,14 @@ async function scanOnce(containerEl) {
       didScan: async (_mode, session) => {
         const arr = session?.newlyRecognizedBarcodes || [];
         if (!arr.length) return;
-        const val = arr[arr.length - 1]?.data ?? '';
-        await teardown();
+        const last = arr[arr.length - 1];
+        // Defensive extraction (some builds expose .data)
+        const val = (last && typeof last.data === 'string') ? last.data : '';
+        if (!val) return;
+
         try { capture.removeListener(listener); } catch(_) {}
-        resolve(val || null);
+        await teardown();
+        resolve(val);
       }
     };
     capture.addListener(listener);
@@ -117,4 +123,3 @@ window.scanWithScandit = async function(containerEl) {
     return null; // let caller decide fallback
   }
 };
-</script>
