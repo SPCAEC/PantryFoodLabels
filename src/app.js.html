@@ -1,4 +1,8 @@
 <script>
+  window.onerror = (msg, src, line, col, err) => {
+  console.error("[app] window.onerror:", msg, "at", src, line+":"+col, err);
+  };
+  console.log("[app] file loaded (top of app.js)");
 (function(){
   // --- Boot guard & breadcrumbs ---------------------------------------------
   console.log("[app] script tag parsed");
