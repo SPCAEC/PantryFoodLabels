@@ -1,25 +1,12 @@
-// Dynamsoft fallback (plain JS). This file is INCLUDED inside a <script> tag in Index.html.
-// Do NOT add another <script> wrapper here.
-
-// Set license if the library is present (prevents ReferenceErrors during early loads)
-if (window.Dynamsoft && Dynamsoft.DBR && Dynamsoft.DBR.BarcodeScanner) {
-  Dynamsoft.DBR.BarcodeScanner.license =
-    "DLS2eyJoYW5kc2hha2VDb2RlIjoiMTA0MzY1MTU3LU1UQTBNelkxTVRVM0xYZGxZaTFVY21saGJGQnliMm8iLCJtYWluU2VydmVyVVJMIjoiaHR0cHM6Ly9tZGxzLmR5bmFtc29mdG9ubGluZS5jb20iLCJvcmdhbml6YXRpb25JRCI6IjEwNDM2NTE1NyIsInN0YW5kYnlTZXJ2ZXJVUkwiOiJodHRwczovL3NkbHMuZHluYW1zb2Z0b25saW5lLmNvbSIsImNoZWNrQ29kZSI6MTI5Nzc5NDc4OH0=";
-}
+<script>
+// Dynamsoft license (working v90)
+Dynamsoft.DBR.BarcodeScanner.license =
+  "DLS2eyJoYW5kc2hha2VDb2RlIjoiMTA0MzY1MTU3LU1UQTBNelkxTVRVM0xYZGxZaTFVY21saGJGQnliMm8iLCJtYWluU2VydmVyVVJMIjoiaHR0cHM6Ly9tZGxzLmR5bmFtc29mdG9ubGluZS5jb20iLCJvcmdhbml6YXRpb25JRCI6IjEwNDM2NTE1NyIsInN0YW5kYnlTZXJ2ZXJVUkwiOiJodHRwczovL3NkbHMuZHluYW1zb2Z0b25saW5lLmNvbSIsImNoZWNrQ29kZSI6MTI5Nzc5NDc4OH0=";
 
 /**
- * Open a simple camera UI, capture a frame, decode with Dynamsoft, return text.
- * Resolves with the barcode text or null (on cancel / failure).
- * @param {HTMLElement} containerEl
- * @returns {Promise<string|null>}
+ * Open a simple camera UI, grab a frame, decode with Dynamsoft, return text.
  */
 async function openDynamsoftScanner(containerEl) {
-  // Library guard
-  if (!window.Dynamsoft || !Dynamsoft.DBR || !Dynamsoft.DBR.BarcodeScanner) {
-    console.warn('[Dynamsoft] library not available');
-    return null;
-  }
-
   containerEl.innerHTML = `
     <div class="camera card">
       <video id="barcodeVideo" autoplay playsinline></video>
@@ -35,68 +22,50 @@ async function openDynamsoftScanner(containerEl) {
   const cancel  = containerEl.querySelector('#cancelScanBtn');
   const canvas  = containerEl.querySelector('#barcodeCanvas');
 
-  // Start camera
   let stream = null;
   try {
     stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
     video.srcObject = stream;
     await new Promise(res => { video.onloadedmetadata = () => { video.play?.(); res(); }; });
   } catch (err) {
-    console.error('[Dynamsoft] camera error:', err);
-    // Return null (don’t throw), so caller can keep UX flowing
-    return null;
+    console.error('Camera error:', err);
+    throw new Error('Camera access denied or unavailable.');
   }
 
-  // Reuse a single instance across scans
   let instance = null;
   async function getScanner() {
-    if (!instance) {
-      instance = await Dynamsoft.DBR.BarcodeScanner.createInstance();
-      // (Optional) you can refine runtime settings here if needed.
-      // instance.updateRuntimeSettings("speed"); // example preset
-    }
+    if (!instance) instance = await Dynamsoft.DBR.BarcodeScanner.createInstance();
     return instance;
   }
 
-  // Small helper to stop camera & clear UI
-  function cleanup() {
-    try { stream?.getTracks().forEach(t => t.stop()); } catch(_) {}
-    containerEl.innerHTML = '';
-  }
-
   return new Promise((resolve) => {
-    cancel.onclick = () => { cleanup(); resolve(null); };
+    cancel.onclick = () => {
+      try { stream?.getTracks().forEach(t => t.stop()); } catch(_) {}
+      containerEl.innerHTML = '';
+      resolve(null);
+    };
 
     capture.onclick = async () => {
-      // Freeze frame to canvas
       canvas.width = video.videoWidth; canvas.height = video.videoHeight;
       canvas.getContext('2d').drawImage(video, 0, 0);
-      cleanup();
+      try { stream?.getTracks().forEach(t => t.stop()); } catch(_) {}
 
       const dataURL = canvas.toDataURL('image/png');
-
       try {
         const scanner = await getScanner();
         const results = await scanner.decode(dataURL);
-
-        // Prefer the first result; if needed, prioritize EAN/UPC
-        let text = '';
-        if (results && results.length) {
-          // Try to pick a UPC/EAN first
-          const preferred = results.find(r =>
-            /EAN|UPC/i.test(r.barcodeFormatString || '')
-          );
-          text = (preferred || results[0]).barcodeText || '';
-        }
-
+        const text = results?.[0]?.barcodeText || '';
+        containerEl.innerHTML = '';
         resolve(text || null);
       } catch (e) {
-        console.error('[Dynamsoft] decode error:', e);
+        console.error('Dynamsoft decode error:', e);
+        containerEl.innerHTML = '';
         resolve(null);
       }
     };
   });
 }
 
-// Expose globally for app.js
+// Expose for app.js
 window.openDynamsoftScanner = openDynamsoftScanner;
+</script>

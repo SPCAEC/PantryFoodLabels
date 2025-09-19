@@ -1,3 +1,4 @@
+<script type="module">
 import {
   configure,
   DataCaptureContext,
@@ -32,7 +33,7 @@ async function ensureConfigured() {
 
 function enableEANUPCSymbologies(settings) {
   settings.enableSymbologies([
-    Symbology.EAN13UPCA,
+    Symbology.EAN13UPCA,  // includes UPC-A
     Symbology.UPCE,
     Symbology.EAN8,
     Symbology.Code128
@@ -70,12 +71,12 @@ async function scanOnce(containerEl) {
   return new Promise(async (resolve) => {
     const listener = {
       didScan: async (_mode, session) => {
-        const arr = session?.newlyRecognizedBarcodes || [];
-        if (!arr.length) return;
-        const val = arr[arr.length - 1]?.data ?? '';
+        const barcodes = session?.newlyRecognizedBarcodes || [];
+        if (!barcodes.length) return;
+        const value = barcodes[barcodes.length - 1]?.data ?? '';
         await teardown();
         try { capture.removeListener(listener); } catch(_) {}
-        resolve(val || null);
+        resolve(value || null);
       }
     };
     capture.addListener(listener);
@@ -86,9 +87,9 @@ async function scanOnce(containerEl) {
   });
 }
 
-// Expose helper (two names for compatibility with app.js)
-window.scanWithScandit = async (containerEl) => {
+// Expose for app.js
+window.openScanditScanner = async (containerEl) => {
   try { return await scanOnce(containerEl); }
   catch (e) { console.error('[Scandit] scan error:', e); return null; }
 };
-window.openScanditScanner = window.scanWithScandit;
+</script>

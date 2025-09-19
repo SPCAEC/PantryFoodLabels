@@ -1,7 +1,6 @@
+<script>
 (function () {
-  // ───────────────────────────────────────────────────────────────────────────
   // DOM & helpers
-  // ───────────────────────────────────────────────────────────────────────────
   const $ = (id) => document.getElementById(id);
   const digits = s => String(s || '').replace(/\D/g, '');
   const toUPC12 = s => { const d = digits(s); return d.length >= 12 ? d.slice(-12) : d.padStart(12, '0'); };
@@ -66,17 +65,9 @@
     }
   });
 
-  // ───────────────────────────────────────────────────────────────────────────
-  // Unified scan flow: Scandit → fallback to Dynamsoft
-  // Expects global helpers (added in Index.html):
-  //   - openScanditScanner(host)        // returns Promise<string|null>
-  //   - openDynamsoftScanner(host)      // returns Promise<string|null>
-  // ───────────────────────────────────────────────────────────────────────────
+  // Unified scan: Scandit → fallback to Dynamsoft
   async function scanWithPreferred(hostEl) {
-    const hasScandit = typeof window.openScanditScanner === 'function';
-    const hasDynamsoft = typeof window.openDynamsoftScanner === 'function';
-
-    if (hasScandit) {
+    if (typeof window.openScanditScanner === 'function') {
       try {
         const code = await window.openScanditScanner(hostEl);
         if (code) return code;
@@ -84,21 +75,15 @@
         console.warn('[Scan] Scandit failed, falling back → Dynamsoft', e);
       }
     }
-    if (hasDynamsoft) {
-      try {
-        const code = await window.openDynamsoftScanner(hostEl);
-        if (code) return code;
-      } catch (e) {
-        console.warn('[Scan] Dynamsoft failed:', e);
-      }
+    if (typeof window.openDynamsoftScanner === 'function') {
+      const code = await window.openDynamsoftScanner(hostEl);
+      if (code) return code;
     }
-    console.error('No scanner helper available — check Index.html includes.');
-    return null;
+    throw new Error('No scanner helper available. Include scanner-scandit.js or scanner-dynamsoft.js.');
   }
 
-  // Click → open camera, one-shot → close & populate → auto lookup
+  // Click → scan → populate → auto-lookup
   scanUPCBtn.addEventListener('click', async () => {
-    scanUPCBtn.disabled = true;                       // prevent double-tap
     setMsg('Opening camera…');
     resultDiv.innerHTML = `
       <div class="card">
@@ -114,30 +99,24 @@
       console.error(e);
       setMsg('Camera unavailable. Try manual entry.', 'error');
       resultDiv.innerHTML = '';
-      scanUPCBtn.disabled = false;                   // re-enable on error
       return;
     }
 
     if (!code) {
       setMsg('No barcode detected. Tap Scan to try again.', 'error');
       resultDiv.innerHTML = '';
-      scanUPCBtn.disabled = false;                   // re-enable on cancel/no result
       return;
     }
 
-    // Success → populate, pad, auto-lookup
     const upc12 = toUPC12(code);
     upcInput.value = upc12;
     lookupBtn.disabled = false;
     setMsg('Scan successful!', 'success');
     resultDiv.innerHTML = '';
-    scanUPCBtn.disabled = false;                     // optional: allow immediate re-scan
     lookupBtn.click();
   });
 
-  // ───────────────────────────────────────────────────────────────────────────
-  // Lookup against sheet
-  // ───────────────────────────────────────────────────────────────────────────
+  // Lookup
   lookupBtn.addEventListener('click', () => {
     if (!upcInput.value) { setMsg('Please enter a UPC.', 'error'); return; }
     const upc12 = toUPC12(upcInput.value);
@@ -185,9 +164,7 @@
     if (expirationInput.value) createLabelBtn.removeAttribute('disabled'); else createLabelBtn.setAttribute('disabled', '');
   });
 
-  // ───────────────────────────────────────────────────────────────────────────
-  // New UPC → capture photos (plain getUserMedia, not barcode)
-  // ───────────────────────────────────────────────────────────────────────────
+  // Photo capture (front & ingredients)
   function promptForFrontImage(upc) {
     currentUPC = upc;
     setMsg('New UPC. Take a clear photo of the FRONT of the package.');
@@ -262,9 +239,6 @@
     };
   }
 
-  // ───────────────────────────────────────────────────────────────────────────
-  // Confirm & Save
-  // ───────────────────────────────────────────────────────────────────────────
   function normalizeSpeciesToOption(raw) {
     const s = String(raw || '').toLowerCase();
     if (/puppy|pup|growth|junior|small\s*breed.*puppy/.test(s)) return 'Puppy';
@@ -299,75 +273,4 @@
             <select name="Species" id="speciesSelect">
               <option value="">Select…</option>
               <option value="Dog"${(norm.Species==='Dog')?' selected':''}>Dog</option>
-              <option value="Puppy"${(norm.Species==='Puppy')?' selected':''}>Puppy</option>
-              <option value="Cat"${(norm.Species==='Cat')?' selected':''}>Cat</option>
-              <option value="Kitten"${(norm.Species==='Kitten')?' selected':''}>Kitten</option>
-            </select>
-          </div>
-          <label class="field">Brand<input name="Brand" value="${norm.Brand}"></label>
-          <label class="field">Product Name<input name="Product Name" value="${norm['Product Name']}"></label>
-          <label class="field">Flavor<input name="Flavor" value="${norm.Flavor}"></label>
-          <label class="field">Ingredients<textarea name="Ingredients" rows="4">${norm.Ingredients}</textarea></label>
-          <button type="submit" class="btn">Save to Database</button>
-        </form>
-      </div>`;
-
-    // Remove accidental duplicates if any
-    const toggles = resultDiv.querySelectorAll('#treatsToggle');
-    for (let i = 1; i < toggles.length; i++) {
-      const row = toggles[i].closest('.check-row');
-      if (row) row.remove();
-    }
-
-    const form = $('confirmForm');
-    form.onsubmit = (e) => {
-      e.preventDefault();
-      const formData = Object.fromEntries(new FormData(e.target));
-      formData.isTreat = $('treatsToggle').checked ? 'Yes' : 'No';
-      confirmedData = { ...confirmedData, ...formData };
-
-      setMsg(spinner('Saving record…'));
-      google.script.run
-        .withSuccessHandler(() => {
-          setMsg('Record saved.', 'success');
-          expirationContainer.style.display = 'block';
-          if (expirationInput.value) createLabelBtn.removeAttribute('disabled'); else createLabelBtn.setAttribute('disabled', '');
-          expirationContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        })
-        .withFailureHandler(err => {
-          console.error(err); setMsg('Save failed', 'error');
-        })
-        .saveRecord(formData);
-    };
-  }
-
-  // ───────────────────────────────────────────────────────────────────────────
-  // Label creation
-  // ───────────────────────────────────────────────────────────────────────────
-  createLabelBtn.addEventListener('click', () => {
-    if (!expirationInput.value) { setMsg('Please select an expiration date.', 'error'); return; }
-    createLabelBtn.disabled = true;
-    setMsg(spinner('Generating label…'));
-
-    const treatsChecked = document.getElementById('treatsToggle')?.checked === true;
-    const foodType = treatsChecked ? 'Treats' : 'Food';
-
-    const labelData = { ...confirmedData, Expiration: expirationInput.value, foodType };
-    google.script.run
-      .withSuccessHandler(res => {
-        setMsg('Label ready.', 'success');
-        resultDiv.innerHTML = `<div class="card"><a href="${res.url}" target="_blank" rel="noopener">Open 4×6 PDF for printing</a></div>`;
-      })
-      .withFailureHandler(err => {
-        console.error(err); setMsg('Label creation failed', 'error'); createLabelBtn.disabled = false;
-      })
-      .createLabel(labelData);
-  });
-
-  // ───────────────────────────────────────────────────────────────────────────
-  // Boot
-  // ───────────────────────────────────────────────────────────────────────────
-  window.addEventListener('load', () => {
-    console.clear(); console.log('🔥 UI Loaded (split frontend) — Scandit-first with Dynamsoft fallback');
-  });
-})();
+              <option value="Puppy"${(norm.Species==='Puppy')?' selected':''}>Pupp
