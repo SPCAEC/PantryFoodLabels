@@ -1,4 +1,3 @@
-<script>
 (function () {
   function onReady() {
     // ───────────────────────────────────────────────────────────────────────────
@@ -340,8 +339,8 @@
     // ───────────────────────────────────────────────────────────────────────────
     // Label creation
     // ───────────────────────────────────────────────────────────────────────────
-    createLabelBtn.addEventListener('click', () => {
-      if (!expirationInput.value) { setMsg('Please select an expiration date.', 'error'); return; }
+    createLabelBtn?.addEventListener('click', () => {
+      if (!expirationInput?.value) { setMsg('Please select an expiration date.', 'error'); return; }
       createLabelBtn.disabled = true;
       setMsg(spinner('Generating label…'));
 
@@ -364,23 +363,30 @@
      // ADD ↓↓↓
   } // end onReady
 
-  // Robust DOM-ready guard (Apps Script may hoist scripts)
+  // ── Robust DOM-ready guard ────────────────────────────────────────────────
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', onReady, { once: true });
   } else {
     onReady();
   }
-window.__appReady = true;
-window.__debugClickScan = () =>
-  document.getElementById('scanUPCBtn')?.dispatchEvent(new Event('click', { bubbles: true }));
-window.__debugLookup = (code='012345678905') => {
-  const inp = document.getElementById('upcInput');
-  const btn = document.getElementById('lookupBtn');
-  if (!inp || !btn) return false;
-  inp.value = code;
-  inp.dispatchEvent(new Event('input', { bubbles: true }));
-  btn.dispatchEvent(new Event('click', { bubbles: true }));
-  return true;
-};
-})();
-</script>
+
+  // ── Debug helpers (call these from the iframe console) ────────────────────
+  window.__appReady = true;
+
+  window.__debugClickScan = () => {
+    document.getElementById('scanUPCBtn')?.dispatchEvent(
+      new Event('click', { bubbles: true })
+    );
+    return true;
+  };
+
+  window.__debugLookup = (code = '012345678905') => {
+    const inp = document.getElementById('upcInput');
+    const btn = document.getElementById('lookupBtn');
+    if (!inp || !btn) return false;
+    inp.value = code;
+    inp.dispatchEvent(new Event('input', { bubbles: true }));
+    btn.dispatchEvent(new Event('click', { bubbles: true }));
+    return true;
+  };
+})(); // <-- end IIFE, no </script> after this

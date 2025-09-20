@@ -1,4 +1,3 @@
-<script type="module">
 import {
   configure,
   DataCaptureContext,
@@ -92,4 +91,3 @@ window.openScanditScanner = async (containerEl) => {
   try { return await scanOnce(containerEl); }
   catch (e) { console.error('[Scandit] scan error:', e); return null; }
 };
-</script>

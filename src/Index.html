@@ -14,7 +14,7 @@
   <!-- Scandit Web DataCapture v7 (primary) -->
   <!-- Load the shims BEFORE the import map to avoid race conditions -->
   <script src="https://ga.jspm.io/npm:es-module-shims@1.10.0/dist/es-module-shims.js"></script>
-  <script type="importmap">
+  <script type="importmap-shim">
   {
     "imports": {
       "@scandit/web-datacapture-core": "https://cdn.jsdelivr.net/npm/@scandit/web-datacapture-core@7.6.0/build/js/index.js",
@@ -62,21 +62,20 @@
       <button id="createLabelBtn" class="btn" disabled>Create 4×6 Label</button>
     </div>
   </div>
-<script>
-  console.log("[index] before includes");
-  window.__indexProbeRan = true;
-</script>
-  <!-- Scandit (module) -->
-  <script type="module">
+
+  <script>console.log("[index] before includes"); window.__indexProbeRan = true;</script>
+
+  <!-- Scandit (module via shim) -->
+  <script type="module-shim">
     <?!= include('scanner-scandit.js'); ?>
   </script>
 
-  <!-- Dynamsoft fallback (plain) -->
+  <!-- Dynamsoft fallback (classic) -->
   <script>
     <?!= include('scanner-dynamsoft.js'); ?>
   </script>
 
-  <!-- App logic (plain) -->
+  <!-- App logic (classic) -->
   <script>
     <?!= include('app.js'); ?>
   </script>
