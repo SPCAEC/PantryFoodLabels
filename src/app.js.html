@@ -1,386 +1,373 @@
 <script>
-  window.onerror = (msg, src, line, col, err) => {
-  console.error("[app] window.onerror:", msg, "at", src, line+":"+col, err);
-  };
-  console.log("[app] file loaded (top of app.js)");
-(function(){
-  // --- Boot guard & breadcrumbs ---------------------------------------------
-  console.log("[app] script tag parsed");
-  window.__app_ping = () => "pong"; // quick sanity check in Console
+(function () {
+  function onReady() {
+    // ───────────────────────────────────────────────────────────────────────────
+    // DOM & helpers
+    // ───────────────────────────────────────────────────────────────────────────
+    const $ = (id) => document.getElementById(id);
+    const digits = s => String(s || '').replace(/\D/g, '');
+    const toUPC12 = s => { const d = digits(s); return d.length >= 12 ? d.slice(-12) : d.padStart(12, '0'); };
+    const spinner = (t) => `<span class="spinner" aria-hidden="true"></span> <span>${t}</span>`;
 
-  // Run after DOM is ready (extra-safe even though script is at the end)
-  function onReady(fn){
-    if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", fn, { once:true });
-    } else {
-      fn();
+    const upcInput            = $('upcInput');
+    const lookupBtn           = $('lookupBtn');
+    const messageDiv          = $('message');
+    const resultDiv           = $('result');
+    const expirationContainer = $('expirationContainer');
+    const expirationInput     = $('expirationInput');
+    const createLabelBtn      = $('createLabelBtn');
+    const scanUPCBtn          = $('scanUPCBtn');
+    const startOverBtn        = $('startOverBtn');
+
+    // If key nodes aren’t present, bail (keeps us safe if HTML changes)
+    if (!upcInput || !lookupBtn || !scanUPCBtn) {
+      console.warn('[app] DOM not ready for wiring');
+      return;
     }
-  }
 
-  onReady(() => {
-    try {
-      console.log("[app] DOM ready, booting…");
+    let currentUPC = null;
+    let confirmedData = null;
 
-      // --- DOM helpers -------------------------------------------------------
-      const $req = (id) => {
-        const el = document.getElementById(id);
-        if (!el) throw new Error(`[app] Missing required element: #${id}`);
-        return el;
-      };
-      const digits   = s => String(s || "").replace(/\D/g, "");
-      const toUPC12  = s => { const d = digits(s); return d.length >= 12 ? d.slice(-12) : d.padStart(12, "0"); };
-      const spinner  = (t) => `<span class="spinner" aria-hidden="true"></span> <span>${t}</span>`;
+    function setMsg(text, type) {
+      messageDiv.classList.remove('error', 'success');
+      if (type === 'error') messageDiv.classList.add('error');
+      if (type === 'success') messageDiv.classList.add('success');
+      messageDiv.innerHTML = text || '';
+    }
 
-      // --- Elements (will throw if any are missing) -------------------------
-      const upcInput            = $req("upcInput");
-      const lookupBtn           = $req("lookupBtn");
-      const messageDiv          = $req("message");
-      const resultDiv           = $req("result");
-      const expirationContainer = $req("expirationContainer");
-      const expirationInput     = $req("expirationInput");
-      const createLabelBtn      = $req("createLabelBtn");
-      const scanUPCBtn          = $req("scanUPCBtn");
-      const startOverBtn        = $req("startOverBtn");
+    function todayISO() {
+      const d = new Date();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${d.getFullYear()}-${m}-${day}`;
+    }
+    expirationInput && (expirationInput.min = todayISO());
 
-      let currentUPC   = null;
-      let confirmedData = null;
+    function scrollAfterLayout(el, block = 'center') {
+      if (!el) return;
+      requestAnimationFrame(() => requestAnimationFrame(() => el.scrollIntoView({ behavior: 'smooth', block })));
+    }
 
-      function setMsg(text, type){
-        messageDiv.classList.remove("error","success");
-        if(type==="error") messageDiv.classList.add("error");
-        if(type==="success") messageDiv.classList.add("success");
-        messageDiv.innerHTML = text || "";
-      }
-      function todayISO(){
-        const d = new Date();
-        const m = String(d.getMonth()+1).padStart(2,"0");
-        const day = String(d.getDate()).padStart(2,"0");
-        return `${d.getFullYear()}-${m}-${day}`;
-      }
-      expirationInput.min = todayISO();
+    function resetUI() {
+      currentUPC = null; confirmedData = null;
+      upcInput.value = ''; upcInput.disabled = false; upcInput.focus?.();
+      lookupBtn.disabled = true; lookupBtn.style.display = '';
+      scanUPCBtn.disabled = false; scanUPCBtn.style.display = '';
+      resultDiv.innerHTML = ''; setMsg('');
+      if (expirationContainer) expirationContainer.style.display = 'none';
+    }
+    startOverBtn && (startOverBtn.onclick = resetUI);
 
-      function scrollAfterLayout(el, block="center"){
-        if(!el) return;
-        requestAnimationFrame(()=>requestAnimationFrame(()=>el.scrollIntoView({behavior:"smooth", block})));
-      }
-
-      function resetUI(){
-        console.log("[app] resetUI");
-        currentUPC=null; confirmedData=null;
-        upcInput.value=""; upcInput.disabled=false; upcInput.focus();
-        lookupBtn.disabled=true; lookupBtn.style.display="";
-        scanUPCBtn.disabled=false; scanUPCBtn.style.display="";
-        resultDiv.innerHTML=""; setMsg("");
-        expirationContainer.style.display="none";
-      }
-      startOverBtn.onclick = resetUI;
-
-      // Enable lookup when text present
-      upcInput.addEventListener("input", () => {
-        upcInput.value = digits(upcInput.value);
-        lookupBtn.disabled = upcInput.value.trim() === "";
-      });
-      // Pad to 12 on blur
-      upcInput.addEventListener("blur", () => {
-        if (upcInput.value) upcInput.value = toUPC12(upcInput.value);
-      });
-      // Enter triggers lookup
-      upcInput.addEventListener("keydown", e => {
-        if (e.key === "Enter" && !lookupBtn.disabled) {
-          e.preventDefault();
-          upcInput.value = toUPC12(upcInput.value);
-          lookupBtn.click();
-        }
-      });
-
-      // --- Scanning (Scandit -> fallback to Dynamsoft) ----------------------
-      async function scanWithPreferred(hostEl){
-        // Prefer Scandit if available
-        if (typeof window.openScanditScanner === "function") {
-          try {
-            console.log("[app] trying Scandit…");
-            const code = await window.openScanditScanner(hostEl);
-            if (code) { console.log("[app] Scandit success:", code); return code; }
-            console.warn("[app] Scandit returned no code");
-          } catch (e) {
-            console.warn("[app] Scandit failed; falling back", e);
-          }
-        }
-        // Fallback to Dynamsoft
-        if (typeof window.openDynamsoftScanner === "function") {
-          console.log("[app] trying Dynamsoft fallback…");
-          const code = await window.openDynamsoftScanner(hostEl);
-          if (code) { console.log("[app] Dynamsoft success:", code); return code; }
-          console.warn("[app] Dynamsoft returned no code");
-        }
-        throw new Error("No scanner helper available. Include scanner-scandit.js or scanner-dynamsoft.js.");
-      }
-
-      scanUPCBtn.addEventListener("click", async () => {
-        setMsg("Opening camera…");
-        resultDiv.innerHTML = `
-          <div class="card">
-            <div id="scannerHost" class="camera"></div>
-          </div>`;
-        const host = document.getElementById("scannerHost");
-        scrollAfterLayout(host, "center");
-
-        let code = null;
-        try {
-          code = await scanWithPreferred(host);
-        } catch (e) {
-          console.error(e);
-          setMsg("Camera unavailable. Try manual entry.", "error");
-          resultDiv.innerHTML = "";
-          return;
-        }
-
-        if (!code) {
-          setMsg("No barcode detected. Tap Scan to try again.", "error");
-          resultDiv.innerHTML = "";
-          return;
-        }
-
-        const upc12 = toUPC12(code);
-        upcInput.value = upc12;
-        lookupBtn.disabled = false;
-        setMsg("Scan successful!", "success");
-        resultDiv.innerHTML = "";
+    // Enable lookup when text present
+    upcInput.addEventListener('input', () => {
+      upcInput.value = digits(upcInput.value);
+      lookupBtn.disabled = upcInput.value.trim() === '';
+    });
+    // Pad to 12 on blur
+    upcInput.addEventListener('blur', () => { if (upcInput.value) upcInput.value = toUPC12(upcInput.value); });
+    // Enter triggers lookup
+    upcInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !lookupBtn.disabled) {
+        e.preventDefault();
+        upcInput.value = toUPC12(upcInput.value);
         lookupBtn.click();
-      });
+      }
+    });
 
-      // --- Lookup -----------------------------------------------------------
-      lookupBtn.addEventListener("click", () => {
-        if (!upcInput.value) { setMsg("Please enter a UPC.", "error"); return; }
-        const upc12 = toUPC12(upcInput.value);
-        upcInput.value = upc12;
-
-        setMsg(spinner("Looking up UPC…"));
-        lookupBtn.disabled = true; upcInput.disabled = true; resultDiv.innerHTML = "";
-        expirationContainer.style.display = "none"; confirmedData = null;
-
-        google.script.run
-          .withSuccessHandler(render)
-          .withFailureHandler(err => {
-            console.error(err); setMsg("Server error during lookup.", "error");
-            lookupBtn.disabled = false; upcInput.disabled = false;
-          })
-          .lookupUPC(upc12);
-      });
-
-      function render(response){
-        if (response?.found){
-          renderFound(response.data);
-          lookupBtn.style.display = "none"; scanUPCBtn.style.display="none";
-        } else if (response?.isNew){
-          lookupBtn.style.display = "none"; scanUPCBtn.style.display="none";
-          promptForFrontImage(upcInput.value.trim());
-        } else {
-          setMsg("UPC does not exist.", "error");
-          lookupBtn.disabled = false; upcInput.disabled = false;
+    // ───────────────────────────────────────────────────────────────────────────
+    // Unified scan flow: Scandit → fallback to Dynamsoft
+    // ───────────────────────────────────────────────────────────────────────────
+    async function scanWithPreferred(hostEl) {
+      if (typeof window.openScanditScanner === 'function') {
+        try {
+          const code = await window.openScanditScanner(hostEl);
+          if (code) return code;
+        } catch (e) {
+          console.warn('[Scan] Scandit failed, falling back → Dynamsoft', e);
         }
       }
-
-      function renderFound(data){
-        confirmedData = data;
-        const cols = ["UPC","Species","Brand","Product Name","Flavor","Ingredients"];
-        let html = '<div class="card"><h3 style="margin:.25rem 0 0 0">Match Found</h3>';
-        html += "<table><tr>" + cols.map(h=>`<th>${h}</th>`).join("") + "</tr>";
-        html += "<tr>" + cols.map(h=>`<td>${data?.[h]||""}</td>`).join("") + "</tr></table></div>";
-        resultDiv.innerHTML = html; setMsg("");
-        expirationContainer.style.display = "block";
-        if (expirationInput.value) createLabelBtn.removeAttribute("disabled"); else createLabelBtn.setAttribute("disabled","");
-        expirationContainer.scrollIntoView({behavior:"smooth", block:"start"});
-        upcInput.disabled=false; lookupBtn.disabled=false;
+      if (typeof window.openDynamsoftScanner === 'function') {
+        const code = await window.openDynamsoftScanner(hostEl);
+        if (code) return code;
       }
-
-      expirationInput.addEventListener("change", ()=>{
-        if (expirationInput.value) createLabelBtn.removeAttribute("disabled"); else createLabelBtn.setAttribute("disabled","");
-      });
-
-      // --- New UPC photo flow ----------------------------------------------
-      function promptForFrontImage(upc){
-        currentUPC = upc;
-        setMsg("New UPC. Take a clear photo of the FRONT of the package.");
-        resultDiv.innerHTML = `
-          <div class="card">
-            <div class="actions">
-              <button id="takeFrontBtn" class="btn">Take Front Photo</button>
-            </div>
-            <div id="cameraContainer" class="camera"></div>
-          </div>`;
-        document.getElementById("takeFrontBtn").onclick = () => openCaptureInto("cameraContainer", "front");
-      }
-
-      function promptForIngredients(){
-        setMsg("Now take a clear photo of the INGREDIENTS label.");
-        resultDiv.innerHTML = `
-          <div class="card">
-            <div class="actions">
-              <button id="takeIngBtn" class="btn">Take Ingredients Photo</button>
-            </div>
-            <div id="ingCameraContainer" class="camera"></div>
-          </div>`;
-        document.getElementById("takeIngBtn").onclick = () => openCaptureInto("ingCameraContainer", "ingredients");
-      }
-
-      async function openCaptureInto(containerId, kind){
-        const container = document.getElementById(containerId);
-        container.innerHTML = `
-          <video id="${kind}Video" autoplay playsinline></video>
-          <div class="actions" style="margin-top:.5rem">
-            <button id="capture${kind}Btn" class="btn">📸 Capture</button>
-            <button id="retake${kind}Btn" class="btn ghost">Cancel</button>
-          </div>`;
-        const video = document.getElementById(`${kind}Video`);
-        const captureBtn = document.getElementById(`capture${kind}Btn`);
-        const retakeBtn  = document.getElementById(`retake${kind}Btn`);
-
-        let stream;
-        try{
-          stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:"environment" } });
-          video.srcObject = stream;
-          video.onloadedmetadata = () => { video.play?.(); };
-        }catch(err){
-          console.error(err);
-          setMsg("Camera access denied. Use file picker.", "error");
-          return;
-        }
-
-        retakeBtn.onclick = () => {
-          try { stream?.getTracks().forEach(t=>t.stop()); } catch(_) {}
-          container.innerHTML = "";
-        };
-
-        captureBtn.onclick = async () => {
-          setMsg(spinner(kind === "front" ? "Uploading front photo…" : "Uploading ingredients photo…"));
-          const canvas = document.createElement("canvas");
-          canvas.width = video.videoWidth; canvas.height = video.videoHeight;
-          canvas.getContext("2d").drawImage(video,0,0);
-          try { stream?.getTracks().forEach(t=>t.stop()); } catch(_) {}
-
-          const dataUrl = canvas.toDataURL("image/jpeg",0.9);
-          if (kind === "front") {
-            google.script.run
-              .withSuccessHandler(()=>{ setMsg("Front photo saved.", "success"); promptForIngredients(); })
-              .withFailureHandler(err=>{ console.error(err); setMsg("Upload failed", "error"); })
-              .captureFrontImageFromDataURL(currentUPC, dataUrl);
-          } else {
-            google.script.run
-              .withSuccessHandler(data=>{ setMsg("Ingredients saved. Review details below.", "success"); renderConfirmForm(data); })
-              .withFailureHandler(err=>{ console.error(err); setMsg("Upload failed", "error"); })
-              .captureIngredientsFromDataURL(currentUPC, dataUrl);
-          }
-        };
-      }
-
-      // --- Confirm & Save ---------------------------------------------------
-      function normalizeSpeciesToOption(raw){
-        const s = String(raw || "").toLowerCase();
-        if (/puppy|pup|growth|junior|small\s*breed.*puppy/.test(s)) return "Puppy";
-        if (/kitten|kittens|growth/.test(s)) return "Kitten";
-        if (/dog|canine/.test(s)) return "Dog";
-        if (/cat|feline/.test(s)) return "Cat";
-        return "";
-      }
-
-      function renderConfirmForm(data){
-        confirmedData = data;
-        const speciesGuess = normalizeSpeciesToOption(data?.Species);
-        const norm = {
-          Species: speciesGuess || "",
-          Brand: data?.Brand || "",
-          "Product Name": data?.["Product Name"] || data?.ProductName || "",
-          Flavor: data?.Flavor || "",
-          Ingredients: data?.Ingredients || ""
-        };
-        const isTreatYes = String(data?.isTreat || "").toLowerCase() === "yes";
-
-        resultDiv.innerHTML = `
-          <div class="card">
-            <h2 style="margin:.25rem 0 1rem 0">Confirm Details</h2>
-            <form id="confirmForm" class="row">
-              <div class="check-row">
-                <input type="checkbox" id="treatsToggle" name="isTreat" ${isTreatYes ? "checked" : ""}/>
-                <label for="treatsToggle">This item is a Treat</label>
-              </div>
-              <div class="field">
-                <label>Species</label>
-                <select name="Species" id="speciesSelect">
-                  <option value="">Select…</option>
-                  <option value="Dog"${(norm.Species==="Dog")?" selected":""}>Dog</option>
-                  <option value="Puppy"${(norm.Species==="Puppy")?" selected":""}>Puppy</option>
-                  <option value="Cat"${(norm.Species==="Cat")?" selected":""}>Cat</option>
-                  <option value="Kitten"${(norm.Species==="Kitten")?" selected":""}>Kitten</option>
-                </select>
-              </div>
-              <label class="field">Brand<input name="Brand" value="${norm.Brand}"></label>
-              <label class="field">Product Name<input name="Product Name" value="${norm["Product Name"]}"></label>
-              <label class="field">Flavor<input name="Flavor" value="${norm.Flavor}"></label>
-              <label class="field">Ingredients<textarea name="Ingredients" rows="4">${norm.Ingredients}</textarea></label>
-              <button type="submit" class="btn">Save to Database</button>
-            </form>
-          </div>`;
-
-        // Remove accidental duplicates if any
-        const toggles = resultDiv.querySelectorAll("#treatsToggle");
-        for (let i = 1; i < toggles.length; i++) {
-          const row = toggles[i].closest(".check-row");
-          if (row) row.remove();
-        }
-
-        const form = document.getElementById("confirmForm");
-        form.onsubmit = (e)=>{
-          e.preventDefault();
-          const formData = Object.fromEntries(new FormData(e.target));
-          formData.isTreat = document.getElementById("treatsToggle").checked ? "Yes" : "No";
-          confirmedData = { ...confirmedData, ...formData };
-
-          setMsg(spinner("Saving record…"));
-          google.script.run
-            .withSuccessHandler(()=>{
-              setMsg("Record saved.", "success");
-              expirationContainer.style.display="block";
-              if (expirationInput.value) createLabelBtn.removeAttribute("disabled"); else createLabelBtn.setAttribute("disabled","");
-              expirationContainer.scrollIntoView({behavior:"smooth", block:"start"});
-            })
-            .withFailureHandler(err=>{
-              console.error(err); setMsg("Save failed", "error");
-            })
-            .saveRecord(formData);
-        };
-      }
-
-      // --- Label creation ---------------------------------------------------
-      createLabelBtn.addEventListener("click", () => {
-        if (!expirationInput.value){ setMsg("Please select an expiration date.", "error"); return; }
-        createLabelBtn.disabled = true;
-        setMsg(spinner("Generating label…"));
-
-        const treatsChecked = document.getElementById("treatsToggle")?.checked === true;
-        const foodType = treatsChecked ? "Treats" : "Food";
-
-        const labelData = { ...confirmedData, Expiration: expirationInput.value, foodType };
-        google.script.run
-          .withSuccessHandler(res=>{
-            setMsg("Label ready.", "success");
-            resultDiv.innerHTML = `<div class="card"><a href="${res.url}" target="_blank" rel="noopener">Open 4×6 PDF for printing</a></div>`;
-          })
-          .withFailureHandler(err=>{
-            console.error(err); setMsg("Label creation failed", "error"); createLabelBtn.disabled=false;
-          })
-          .createLabel(labelData);
-      });
-
-      console.log("[app] boot complete ✅");
-      // Tiny visible ping so we *know* JS is running:
-      setMsg("Ready.", "success");
-
-    } catch (err) {
-      console.error("[app] FATAL during boot:", err);
-      const m = document.getElementById("message");
-      if (m) m.textContent = "App failed to initialize. See console for details.";
+      throw new Error('No scanner helper available. Include scanner-scandit.js or scanner-dynamsoft.js.');
     }
-  });
+
+    // Click → open camera, one-shot → close & populate → auto lookup
+    scanUPCBtn.addEventListener('click', async () => {
+      setMsg('Opening camera…');
+      resultDiv.innerHTML = `
+        <div class="card">
+          <div id="scannerHost" class="camera"></div>
+        </div>`;
+      const host = $('scannerHost');
+      scrollAfterLayout(host, 'center');
+
+      let code = null;
+      try {
+        code = await scanWithPreferred(host);
+      } catch (e) {
+        console.error(e);
+        setMsg('Camera unavailable. Try manual entry.', 'error');
+        resultDiv.innerHTML = '';
+        return;
+      }
+
+      if (!code) {
+        setMsg('No barcode detected. Tap Scan to try again.', 'error');
+        resultDiv.innerHTML = '';
+        return;
+      }
+
+      const upc12 = toUPC12(code);
+      upcInput.value = upc12;
+      lookupBtn.disabled = false;
+      setMsg('Scan successful!', 'success');
+      resultDiv.innerHTML = '';
+      lookupBtn.click();
+    });
+
+    // ───────────────────────────────────────────────────────────────────────────
+    // Lookup against sheet
+    // ───────────────────────────────────────────────────────────────────────────
+    lookupBtn.addEventListener('click', () => {
+      if (!upcInput.value) { setMsg('Please enter a UPC.', 'error'); return; }
+      const upc12 = toUPC12(upcInput.value);
+      upcInput.value = upc12;
+
+      setMsg(spinner('Looking up UPC…'));
+      lookupBtn.disabled = true; upcInput.disabled = true; resultDiv.innerHTML = '';
+      if (expirationContainer) expirationContainer.style.display = 'none'; confirmedData = null;
+
+      google.script.run
+        .withSuccessHandler(render)
+        .withFailureHandler(err => {
+          console.error(err); setMsg('Server error during lookup.', 'error');
+          lookupBtn.disabled = false; upcInput.disabled = false;
+        })
+        .lookupUPC(upc12);
+    });
+
+    function render(response) {
+      if (response.found) {
+        renderFound(response.data);
+        lookupBtn.style.display = 'none'; scanUPCBtn.style.display = 'none';
+      } else if (response.isNew) {
+        lookupBtn.style.display = 'none'; scanUPCBtn.style.display = 'none';
+        promptForFrontImage(upcInput.value.trim());
+      } else {
+        setMsg('UPC does not exist.', 'error');
+        lookupBtn.disabled = false; upcInput.disabled = false;
+      }
+    }
+
+    function renderFound(data) {
+      confirmedData = data;
+      const cols = ['UPC', 'Species', 'Brand', 'Product Name', 'Flavor', 'Ingredients'];
+      let html = '<div class="card"><h3 style="margin:.25rem 0 0 0">Match Found</h3>';
+      html += '<table><tr>' + cols.map(h => `<th>${h}</th>`).join('') + '</tr>';
+      html += '<tr>' + cols.map(h => `<td>${data[h] || ''}</td>`).join('') + '</tr></table></div>';
+      resultDiv.innerHTML = html; setMsg('');
+      if (expirationContainer) {
+        expirationContainer.style.display = 'block';
+        if (expirationInput?.value) createLabelBtn.removeAttribute('disabled'); else createLabelBtn.setAttribute('disabled', '');
+        expirationContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      upcInput.disabled = false; lookupBtn.disabled = false;
+    }
+    expirationInput?.addEventListener('change', () => {
+      if (expirationInput.value) createLabelBtn.removeAttribute('disabled'); else createLabelBtn.setAttribute('disabled', '');
+    });
+
+    // ───────────────────────────────────────────────────────────────────────────
+    // New UPC → capture photos (plain getUserMedia, not barcode)
+    // ───────────────────────────────────────────────────────────────────────────
+    function promptForFrontImage(upc) {
+      currentUPC = upc;
+      setMsg('New UPC. Take a clear photo of the FRONT of the package.');
+      resultDiv.innerHTML = `
+        <div class="card">
+          <div class="actions">
+            <button id="takeFrontBtn" class="btn">Take Front Photo</button>
+          </div>
+          <div id="cameraContainer" class="camera"></div>
+        </div>`;
+      $('takeFrontBtn').onclick = () => openCaptureInto('cameraContainer', 'front');
+    }
+
+    function promptForIngredients() {
+      setMsg('Now take a clear photo of the INGREDIENTS label.');
+      resultDiv.innerHTML = `
+        <div class="card">
+          <div class="actions">
+            <button id="takeIngBtn" class="btn">Take Ingredients Photo</button>
+          </div>
+          <div id="ingCameraContainer" class="camera"></div>
+        </div>`;
+      $('takeIngBtn').onclick = () => openCaptureInto('ingCameraContainer', 'ingredients');
+    }
+
+    async function openCaptureInto(containerId, kind) {
+      const container = $(containerId);
+      container.innerHTML = `
+        <video id="${kind}Video" autoplay playsinline></video>
+        <div class="actions" style="margin-top:.5rem">
+          <button id="capture${kind}Btn" class="btn">📸 Capture</button>
+          <button id="retake${kind}Btn" class="btn ghost">Cancel</button>
+        </div>`;
+      const video = $(`${kind}Video`);
+      const captureBtn = $(`capture${kind}Btn`);
+      const retakeBtn = $(`retake${kind}Btn`);
+
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        video.srcObject = stream;
+        video.onloadedmetadata = () => { video.play?.(); };
+      } catch (err) {
+        setMsg('Camera access denied. Use file picker.', 'error');
+        return;
+      }
+
+      retakeBtn.onclick = () => {
+        try { stream?.getTracks().forEach(t => t.stop()); } catch (_) { }
+        container.innerHTML = '';
+      };
+
+      captureBtn.onclick = async () => {
+        setMsg(spinner(kind === 'front' ? 'Uploading front photo…' : 'Uploading ingredients photo…'));
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+        canvas.getContext('2d').drawImage(video, 0, 0);
+        try { stream?.getTracks().forEach(t => t.stop()); } catch (_) { }
+
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+        if (kind === 'front') {
+          google.script.run
+            .withSuccessHandler(() => { setMsg('Front photo saved.', 'success'); promptForIngredients(); })
+            .withFailureHandler(err => { console.error(err); setMsg('Upload failed', 'error'); })
+            .captureFrontImageFromDataURL(currentUPC, dataUrl);
+        } else {
+          google.script.run
+            .withSuccessHandler(data => { setMsg('Ingredients saved. Review details below.', 'success'); renderConfirmForm(data); })
+            .withFailureHandler(err => { console.error(err); setMsg('Upload failed', 'error'); })
+            .captureIngredientsFromDataURL(currentUPC, dataUrl);
+        }
+      };
+    }
+
+    // ───────────────────────────────────────────────────────────────────────────
+    // Confirm & Save
+    // ───────────────────────────────────────────────────────────────────────────
+    function normalizeSpeciesToOption(raw) {
+      const s = String(raw || '').toLowerCase();
+      if (/puppy|pup|growth|junior|small\s*breed.*puppy/.test(s)) return 'Puppy';
+      if (/kitten|kittens|growth/.test(s)) return 'Kitten';
+      if (/dog|canine/.test(s)) return 'Dog';
+      if (/cat|feline/.test(s)) return 'Cat';
+      return '';
+    }
+
+    function renderConfirmForm(data) {
+      confirmedData = data;
+      const speciesGuess = normalizeSpeciesToOption(data.Species);
+      const norm = {
+        Species: speciesGuess || '',
+        Brand: data.Brand || '',
+        'Product Name': data['Product Name'] || data.ProductName || '',
+        Flavor: data.Flavor || '',
+        Ingredients: data.Ingredients || ''
+      };
+      const isTreatYes = String(data.isTreat || '').toLowerCase() === 'yes';
+
+      resultDiv.innerHTML = `
+        <div class="card">
+          <h2 style="margin:.25rem 0 1rem 0">Confirm Details</h2>
+          <form id="confirmForm" class="row">
+            <div class="check-row">
+              <input type="checkbox" id="treatsToggle" name="isTreat" ${isTreatYes ? 'checked' : ''}/>
+              <label for="treatsToggle">This item is a Treat</label>
+            </div>
+            <div class="field">
+              <label>Species</label>
+              <select name="Species" id="speciesSelect">
+                <option value="">Select…</option>
+                <option value="Dog"${(norm.Species==='Dog')?' selected':''}>Dog</option>
+                <option value="Puppy"${(norm.Species==='Puppy')?' selected':''}>Puppy</option>
+                <option value="Cat"${(norm.Species==='Cat')?' selected':''}>Cat</option>
+                <option value="Kitten"${(norm.Species==='Kitten')?' selected':''}>Kitten</option>
+              </select>
+            </div>
+            <label class="field">Brand<input name="Brand" value="${norm.Brand}"></label>
+            <label class="field">Product Name<input name="Product Name" value="${norm['Product Name']}"></label>
+            <label class="field">Flavor<input name="Flavor" value="${norm.Flavor}"></label>
+            <label class="field">Ingredients<textarea name="Ingredients" rows="4">${norm.Ingredients}</textarea></label>
+            <button type="submit" class="btn">Save to Database</button>
+          </form>
+        </div>`;
+
+      // Remove accidental duplicates if any
+      const toggles = resultDiv.querySelectorAll('#treatsToggle');
+      for (let i = 1; i < toggles.length; i++) {
+        const row = toggles[i].closest('.check-row');
+        if (row) row.remove();
+      }
+
+      const form = $('confirmForm');
+      form.onsubmit = (e) => {
+        e.preventDefault();
+        const formData = Object.fromEntries(new FormData(e.target));
+        formData.isTreat = $('treatsToggle').checked ? 'Yes' : 'No';
+        confirmedData = { ...confirmedData, ...formData };
+
+        setMsg(spinner('Saving record…'));
+        google.script.run
+          .withSuccessHandler(() => {
+            setMsg('Record saved.', 'success');
+            if (expirationContainer) {
+              expirationContainer.style.display = 'block';
+              if (expirationInput.value) createLabelBtn.removeAttribute('disabled'); else createLabelBtn.setAttribute('disabled', '');
+              expirationContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+          })
+          .withFailureHandler(err => {
+            console.error(err); setMsg('Save failed', 'error');
+          })
+          .saveRecord(formData);
+      };
+    }
+
+    // ───────────────────────────────────────────────────────────────────────────
+    // Label creation
+    // ───────────────────────────────────────────────────────────────────────────
+    createLabelBtn.addEventListener('click', () => {
+      if (!expirationInput.value) { setMsg('Please select an expiration date.', 'error'); return; }
+      createLabelBtn.disabled = true;
+      setMsg(spinner('Generating label…'));
+
+      const treatsChecked = document.getElementById('treatsToggle')?.checked === true;
+      const foodType = treatsChecked ? 'Treats' : 'Food';
+
+      const labelData = { ...confirmedData, Expiration: expirationInput.value, foodType };
+      google.script.run
+        .withSuccessHandler(res => {
+          setMsg('Label ready.', 'success');
+          resultDiv.innerHTML = `<div class="card"><a href="${res.url}" target="_blank" rel="noopener">Open 4×6 PDF for printing</a></div>`;
+        })
+        .withFailureHandler(err => {
+          console.error(err); setMsg('Label creation failed', 'error'); createLabelBtn.disabled = false;
+        })
+        .createLabel(labelData);
+    });
+
+    console.log('[app] wired events after DOM ready');
+  } // end onReady
+
+  // Robust DOM-ready guard (Apps Script may hoist scripts)
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', onReady, { once: true });
+  } else {
+    onReady();
+  }
 })();
 </script>
