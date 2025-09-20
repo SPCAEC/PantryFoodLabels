@@ -361,6 +361,18 @@
     });
 
     console.log('[app] wired events after DOM ready');
+     // ADD ↓↓↓
+    window.__appReady = true;
+    window.__debugClickScan = () => document.getElementById('scanUPCBtn')?.dispatchEvent(new Event('click', {bubbles:true}));
+    window.__debugLookup = (code='012345678905') => {
+      const inp = document.getElementById('upcInput');
+      const btn = document.getElementById('lookupBtn');
+      if (!inp || !btn) return false;
+      inp.value = code;
+      inp.dispatchEvent(new Event('input', {bubbles:true}));
+      btn.dispatchEvent(new Event('click', {bubbles:true}));
+      return true;
+    };
   } // end onReady
 
   // Robust DOM-ready guard (Apps Script may hoist scripts)
