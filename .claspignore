@@ -1,0 +1,8 @@
+**/**
+!src/**
+
+# Explicit extra ignores (even inside src if you ever add them)
+src/node_modules/**
+src/**/*.test.*
+src/**/__mocks__/**
+src/**/.DS_Store

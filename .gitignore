@@ -1,8 +1,16 @@
+# Node / tooling
 node_modules/
-.clasprc.json
-.token.json
+package-lock.json
+
+# VS Code
 .vscode/
+
+# Local clasp creds/cache
+.clasp.json
+.classpath
+.clasp-dev.json
+.clasp-prod.json
+
+# OS junk
 .DS_Store
-dist/
-build/
-*.zip
+Thumbs.db
