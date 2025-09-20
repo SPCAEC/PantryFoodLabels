@@ -66,10 +66,11 @@
   <script>console.log("[index] before includes"); window.__indexProbeRan = true;</script>
 
   <!-- Scandit (module via shim) -->
+  <!--
   <script type="module-shim">
     <?!= include('scanner-scandit.js'); ?>
   </script>
-
+-->
   <!-- Dynamsoft fallback (classic) -->
   <script>
     <?!= include('scanner-dynamsoft.js'); ?>
